@@ -43,8 +43,7 @@ Want to read in English? Click [here](./README.md).
 ### Внешне
 1. Установите `DailyTimeTracker.js` со вкладки Releases на GitHub
 2. Поместите `DailyTimeTracker.js` в:
-
-`%AppData%\spicetify\Extensions`
+   `%AppData%\spicetify\Extensions`
 3. Включите его:
 
 ```powershell
