@@ -34,11 +34,17 @@ Tracks how much time you spend listening to Spotify each day and shows a timer i
 
 ## Installation
 
-### Windows
+### Using the Spicetify Marketplace (recommended)
 
-1. Put `DailyTimeTracker.js` into:
+1. Search `Daily Time Tracker` under the Extensions tab
+2. Click the Install button
+3. Done
+
+### Externally
+1. Install `DailyTimeTracker.js` from Releases tab on GitHub
+2. Put `DailyTimeTracker.js` into:
    `%AppData%\spicetify\Extensions`
-2. Enable it:
+3. Enable it:
 
 ```powershell
 spicetify config extensions DailyTimeTracker.js
