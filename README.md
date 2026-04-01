@@ -1,8 +1,13 @@
+Хотите прочитать на русском? Нажмите [`сюда`](./README-Rus.md).
+
 # Daily Time Tracker for Spicetify
 
 Tracks how much time you spend listening to Spotify each day and shows a timer in the top bar.
 
-This codebase was written with the help of ChatGPT.
+> [!NOTE]
+> This codebase was written with the help of ChatGPT.
+
+![Preview](./preview.png)
 
 ## Features
 
@@ -25,10 +30,11 @@ This codebase was written with the help of ChatGPT.
 ## Files
 
 - [`DailyTimeTracker.js`](./DailyTimeTracker.js): main Spicetify extension
+- [`preview.png`](./preview.png): preview image used by the repository and marketplace
 
 ## Installation
 
-### Windows quick method
+### Windows
 
 1. Put `DailyTimeTracker.js` into:
    `%AppData%\spicetify\Extensions`
@@ -38,6 +44,8 @@ This codebase was written with the help of ChatGPT.
 spicetify config extensions DailyTimeTracker.js
 spicetify apply
 ```
+
+## Behavior
 
 - If music is playing, tracked time increases
 - If playback stops for less than 30 seconds, counting continues
