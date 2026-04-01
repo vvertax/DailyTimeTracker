@@ -34,11 +34,18 @@ Want to read in English? Click [here](./README.md).
 
 ## Установка
 
-### Windows
+### Использование Spicetify Marketplace (рекомендованно)
 
-1. Поместите `DailyTimeTracker.js` в:
-   `%AppData%\spicetify\Extensions`
-2. Подключите расширение:
+1. Найдите `Daily Time Tracker` во вкладке Extensions
+2. Нажмите на кнопку скачивания
+3. Готово
+
+### Внешне
+1. Установите `DailyTimeTracker.js` со вкладки Releases на GitHub
+2. Поместите `DailyTimeTracker.js` в:
+
+`%AppData%\spicetify\Extensions`
+3. Включите его:
 
 ```powershell
 spicetify config extensions DailyTimeTracker.js
