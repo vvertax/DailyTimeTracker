@@ -30,7 +30,6 @@ Want to read in English? Click [here](./README.md).
 ## Файлы
 
 - [`DailyTimeTracker.js`](./DailyTimeTracker.js): основное расширение Spicetify
-- [`sync-dailytimetracker.bat`](./sync-dailytimetracker.bat): копирует скрипт в папку расширений Spicetify и запускает `spicetify apply`
 - [`preview.png`](./preview.png): превью-изображение для репозитория и маркетплейса
 
 ## Установка
