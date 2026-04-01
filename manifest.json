@@ -2,7 +2,7 @@
   "name": "Daily Time Tracker",
   "description": "Tracks daily Spotify listening time and shows it in the top bar with daily history.",
   "main": "DailyTimeTracker.js",
-  "preview": "preview.png",
+  "preview": "marketplace/preview.png",
   "readme": "README.md",
   "authors": [
     {
