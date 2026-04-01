@@ -14,7 +14,6 @@ This codebase was written with the help of ChatGPT.
 - Click to pin or unpin popup
 - Language switcher: `RU / ENG`
 - Local history storage through `Spicetify.LocalStorage`
-- Quick sync script for Windows
 
 ## Current UI
 
@@ -26,35 +25,19 @@ This codebase was written with the help of ChatGPT.
 ## Files
 
 - [`DailyTimeTracker.js`](./DailyTimeTracker.js): main Spicetify extension
-- [`sync-dailytimetracker.bat`](./sync-dailytimetracker.bat): copies the script to the Spicetify Extensions folder and runs `spicetify apply`
 
 ## Installation
 
 ### Windows quick method
 
 1. Put `DailyTimeTracker.js` into:
-   `C:\Users\addiction\AppData\Roaming\spicetify\Extensions`
+   `%AppData%\spicetify\Extensions`
 2. Enable it:
 
 ```powershell
 spicetify config extensions DailyTimeTracker.js
 spicetify apply
 ```
-
-### With the included batch file
-
-Run:
-
-```bat
-sync-dailytimetracker.bat
-```
-
-It will:
-
-1. Copy `DailyTimeTracker.js` to the Spicetify Extensions folder
-2. Run `spicetify apply`
-
-## Behavior
 
 - If music is playing, tracked time increases
 - If playback stops for less than 30 seconds, counting continues
