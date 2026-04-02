@@ -33,6 +33,8 @@
         popupOffsetPx: 10,
         viewportMarginPx: 16,
         maxPopupWidthPx: 520,
+        todaySessionsToggleThreshold: 5,
+        collapsedTodaySessionsCount: 1,
         topbarSelectors: [
             ".main-topBar-topbarContent",
             ".Root__top-bar header",
@@ -63,6 +65,8 @@
             summaryTotalNode: null,
             sessionsTitleNode: null,
             intervalsListNode: null,
+            todaySessionsToggleNode: null,
+            todaySessionsExpanded: false,
             historyTitleNode: null,
             historyListNode: null,
             lastHistorySignature: "",
@@ -659,9 +663,46 @@
                 color: #b3b3b3;
             }
 
+            .dtt-popup-section-heading {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+            }
+
             .dtt-intervals-list {
                 overflow-y: auto;
                 padding-right: 4px;
+            }
+
+            .dtt-today-sessions-toggle {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                align-self: flex-start;
+                width: 32px;
+                height: 32px;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.07);
+                color: #b3b3b3;
+                cursor: pointer;
+                transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+            }
+
+            .dtt-today-sessions-toggle:hover {
+                background: rgba(255, 255, 255, 0.12);
+                color: #fff;
+            }
+
+            .dtt-today-sessions-toggle.is-expanded svg {
+                transform: rotate(180deg);
+            }
+
+            .dtt-today-sessions-toggle svg {
+                width: 16px;
+                height: 16px;
+                transition: transform 0.15s ease;
             }
 
             .dtt-intervals-list::-webkit-scrollbar {
@@ -754,6 +795,35 @@
                 label: `${formatClockTime(interval.start)} - ${formatClockTime(interval.end)}`,
                 duration: formatDuration(getIntervalDurationSeconds(interval))
             }));
+    }
+
+    function getDisplayedTodayIntervalRows(todayIntervalRows) {
+        if (state.popup.todaySessionsExpanded) {
+            return todayIntervalRows;
+        }
+
+        return todayIntervalRows.slice(0, CONFIG.collapsedTodaySessionsCount);
+    }
+
+    function updateTodaySessionsToggle(todayIntervalRows) {
+        const toggleNode = state.popup.todaySessionsToggleNode;
+        if (!toggleNode) {
+            return;
+        }
+
+        const shouldShowToggle = todayIntervalRows.length > CONFIG.todaySessionsToggleThreshold;
+        toggleNode.hidden = !shouldShowToggle;
+
+        if (!shouldShowToggle) {
+            state.popup.todaySessionsExpanded = false;
+        }
+
+        toggleNode.classList.toggle("is-expanded", state.popup.todaySessionsExpanded);
+        toggleNode.setAttribute(
+            "aria-label",
+            state.popup.todaySessionsExpanded ? "Hide extra sessions" : "Show all sessions"
+        );
+        toggleNode.title = state.popup.todaySessionsExpanded ? "Hide extra sessions" : "Show all sessions";
     }
 
     function clearPopupHideTimeout() {
@@ -888,6 +958,9 @@
         const intervalsSection = document.createElement("div");
         intervalsSection.className = "dtt-popup-section";
 
+        const intervalsHeading = document.createElement("div");
+        intervalsHeading.className = "dtt-popup-section-heading";
+
         const intervalsTitle = document.createElement("div");
         intervalsTitle.className = "dtt-popup-section-title";
         intervalsTitle.textContent = t("sessionsTodayTitle");
@@ -895,7 +968,23 @@
         const intervalsList = document.createElement("div");
         intervalsList.className = "dtt-intervals-list";
 
-        intervalsSection.append(intervalsTitle, intervalsList);
+        const todaySessionsToggle = document.createElement("button");
+        todaySessionsToggle.type = "button";
+        todaySessionsToggle.className = "dtt-today-sessions-toggle";
+        todaySessionsToggle.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+        `;
+        todaySessionsToggle.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            state.popup.todaySessionsExpanded = !state.popup.todaySessionsExpanded;
+            updatePopupDynamicContentV2();
+        });
+
+        intervalsHeading.append(intervalsTitle, todaySessionsToggle);
+        intervalsSection.append(intervalsHeading, intervalsList);
         root.appendChild(intervalsSection);
 
         const historySection = document.createElement("div");
@@ -917,6 +1006,7 @@
         state.popup.summaryTotalNode = totalNode;
         state.popup.sessionsTitleNode = intervalsTitle;
         state.popup.intervalsListNode = intervalsList;
+        state.popup.todaySessionsToggleNode = todaySessionsToggle;
         state.popup.historyTitleNode = historyTitle;
         state.popup.historyListNode = historyList;
         state.popup.retentionLabelNode = retentionLabel;
@@ -988,12 +1078,13 @@
         if (state.popup.intervalsListNode) {
             renderRows(
                 state.popup.intervalsListNode,
-                todayIntervalRows.map((row) => ({
+                getDisplayedTodayIntervalRows(todayIntervalRows).map((row) => ({
                     ...row,
                     isToday: true
                 }))
             );
         }
+        updateTodaySessionsToggle(todayIntervalRows);
         if (state.popup.historyListNode) {
             renderRows(
                 state.popup.historyListNode,
@@ -1060,12 +1151,13 @@
         if (state.popup.intervalsListNode) {
             renderRows(
                 state.popup.intervalsListNode,
-                todayIntervalRows.map((row) => ({
+                getDisplayedTodayIntervalRows(todayIntervalRows).map((row) => ({
                     ...row,
                     isToday: true
                 }))
             );
         }
+        updateTodaySessionsToggle(todayIntervalRows);
     }
 
     function updatePopupHistoryV2(dailySummaryRows = getDailySummaryRows()) {
@@ -1161,6 +1253,8 @@
         state.popup.summaryTotalNode = null;
         state.popup.sessionsTitleNode = null;
         state.popup.intervalsListNode = null;
+        state.popup.todaySessionsToggleNode = null;
+        state.popup.todaySessionsExpanded = false;
         state.popup.historyTitleNode = null;
         state.popup.historyListNode = null;
         state.popup.lastHistorySignature = "";
@@ -1425,6 +1519,8 @@
         state.popup.summaryTotalNode = null;
         state.popup.sessionsTitleNode = null;
         state.popup.intervalsListNode = null;
+        state.popup.todaySessionsToggleNode = null;
+        state.popup.todaySessionsExpanded = false;
         state.popup.historyTitleNode = null;
         state.popup.historyListNode = null;
         state.popup.lastHistorySignature = "";
