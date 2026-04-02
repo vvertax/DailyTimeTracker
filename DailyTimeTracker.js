@@ -533,6 +533,7 @@
                 flex-direction: column;
                 gap: 18px;
                 padding: 18px 20px;
+                overflow: hidden;
                 border-radius: 14px;
                 background: #181818;
                 color: #fff;
@@ -653,6 +654,7 @@
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
+                min-height: 0;
             }
 
             .dtt-popup-section-title {
@@ -672,7 +674,12 @@
 
             .dtt-intervals-list {
                 overflow-y: auto;
+                min-height: 0;
                 padding-right: 4px;
+            }
+
+            .dtt-today-intervals-list {
+                max-height: min(32vh, 360px);
             }
 
             .dtt-today-sessions-toggle {
@@ -966,7 +973,7 @@
         intervalsTitle.textContent = t("sessionsTodayTitle");
 
         const intervalsList = document.createElement("div");
-        intervalsList.className = "dtt-intervals-list";
+        intervalsList.className = "dtt-intervals-list dtt-today-intervals-list";
 
         const todaySessionsToggle = document.createElement("button");
         todaySessionsToggle.type = "button";
