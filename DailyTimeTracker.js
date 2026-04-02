@@ -72,14 +72,22 @@
             lastHistorySignature: "",
             lastLanguage: null,
             languageButtons: [],
-            retentionLabelNode: null
+            retentionLabelNode: null,
+            retentionSuffixNode: null,
+            settingsOpen: false,
+            settingsGearNode: null,
+            settingsBackNode: null,
+            settingsPanelNode: null,
+            settingsLangTitleNode: null,
+            settingsRetentionTitleNode: null
         },
         ui: {
             widget: null,
             timeNode: null,
             pendingInjectCheck: false,
             resizeHandler: null,
-            beforeUnloadHandler: null
+            beforeUnloadHandler: null,
+            visibilityHandler: null
         },
         runtime: {
             intervalId: null,
@@ -98,8 +106,11 @@
             emptyState: "Пока нет данных по дням.",
             sessionsTodayTitle: "Сессии сегодня",
             historyTitle: "История",
-            retentionLabel: "Сохранять историю",
+            retentionLabel: "Хранить историю",
             retentionSuffix: "месяц(ев)",
+            settingsTitle: "Настройки",
+            settingsBack: "Назад",
+            languageLabel: "Язык",
             languageRu: "RU",
             languageEn: "ENG"
         },
@@ -112,8 +123,11 @@
             emptyState: "No daily history yet.",
             sessionsTodayTitle: "Today Sessions",
             historyTitle: "History",
-            retentionLabel: "Keep history",
+            retentionLabel: "Keep history for",
             retentionSuffix: "months",
+            settingsTitle: "Settings",
+            settingsBack: "Back",
+            languageLabel: "Language",
             languageRu: "RU",
             languageEn: "ENG"
         }
@@ -152,6 +166,18 @@
     function normalizeHistoryRetentionMonths(value) {
         const normalized = Math.floor(Number(value) || CONFIG.historyRetentionMonths);
         return Math.min(CONFIG.maxHistoryRetentionMonths, Math.max(1, normalized));
+    }
+
+    function getMonthsPlural(n) {
+        if (state.language === "ru") {
+            const mod10 = n % 10;
+            const mod100 = n % 100;
+            if (mod100 >= 11 && mod100 <= 19) return "месяцев";
+            if (mod10 === 1) return "месяц";
+            if (mod10 >= 2 && mod10 <= 4) return "месяца";
+            return "месяцев";
+        }
+        return n === 1 ? "month" : "months";
     }
 
     function formatDuration(totalSeconds) {
@@ -478,19 +504,21 @@
         const style = document.createElement("style");
         style.id = "dtt-styles";
         style.textContent = `
+            /* ── Widget pill ─────────────────────────────────── */
             #dtt-widget {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                margin: 0 12px;
-                padding: 6px 12px;
-                background: rgba(255, 255, 255, 0.08);
-                border-radius: 20px;
-                border: 1px solid transparent;
+                gap: 7px;
+                margin: 0 10px;
+                padding: 5px 13px 5px 10px;
+                background: rgba(255, 255, 255, 0.06);
+                border-radius: 999px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 cursor: pointer;
                 position: relative;
                 z-index: 99;
-                transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+                transition: background 0.18s ease, border-color 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
                 user-select: none;
                 flex-shrink: 0;
                 pointer-events: auto;
@@ -499,31 +527,54 @@
                 font-family: "CircularSp", "Circular Std", "Circular", var(--font-family, sans-serif);
             }
 
+            #dtt-widget::before {
+                content: "";
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: #1ed760;
+                flex-shrink: 0;
+                box-shadow: 0 0 6px #1ed760;
+                transition: opacity 0.3s ease, box-shadow 0.3s ease;
+            }
+
+            #dtt-widget.dtt-paused::before {
+                background: #555;
+                box-shadow: none;
+            }
+
             #dtt-widget:hover {
-                background: rgba(255, 255, 255, 0.15);
-                border-color: rgba(255, 255, 255, 0.2);
-                transform: scale(1.05);
+                background: rgba(255, 255, 255, 0.11);
+                border-color: rgba(255, 255, 255, 0.18);
+                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+                transform: translateY(-1px);
             }
 
             #dtt-widget:active {
-                transform: scale(0.97);
+                transform: scale(0.97) translateY(0);
+                box-shadow: none;
             }
 
+            /* ── Timer text ──────────────────────────────────── */
             #dtt-time {
-                min-width: 74px;
+                min-width: 72px;
                 text-align: center;
                 white-space: nowrap;
                 pointer-events: none;
-                font-size: 13px;
+                font-size: 12.5px;
                 font-weight: 700;
+                letter-spacing: 0.03em;
                 color: var(--spice-text, #fff);
+                font-variant-numeric: tabular-nums;
                 font-family: inherit;
+                transition: opacity 0.25s ease;
             }
 
             #dtt-widget.dtt-paused #dtt-time {
-                opacity: 0.45;
+                opacity: 0.38;
             }
 
+            /* ── Popup container ─────────────────────────────── */
             #dtt-hover-popup {
                 position: fixed;
                 z-index: 10000;
@@ -531,18 +582,20 @@
                 max-height: min(70vh, 720px);
                 display: flex;
                 flex-direction: column;
-                gap: 18px;
-                padding: 18px 20px;
+                gap: 0;
+                padding: 0;
                 overflow: hidden;
-                border-radius: 14px;
-                background: #181818;
+                border-radius: 16px;
+                background: #111111;
                 color: #fff;
                 font-family: "CircularSp", "Circular Std", "Circular", var(--font-family, sans-serif);
-                box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                box-shadow:
+                    0 0 0 1px rgba(255, 255, 255, 0.07),
+                    0 8px 24px rgba(0, 0, 0, 0.5),
+                    0 32px 64px rgba(0, 0, 0, 0.55);
                 opacity: 0;
-                transform: translateY(-4px) scale(0.98);
-                transition: opacity 0.16s ease, transform 0.16s ease;
+                transform: translateY(-6px) scale(0.97);
+                transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
                 pointer-events: auto;
                 -webkit-app-region: no-drag;
                 app-region: no-drag;
@@ -554,115 +607,161 @@
             }
 
             #dtt-hover-popup.dtt-pinned {
-                border-color: rgba(29, 185, 84, 0.45);
+                box-shadow:
+                    0 0 0 1px rgba(30, 215, 96, 0.3),
+                    0 8px 24px rgba(0, 0, 0, 0.5),
+                    0 32px 64px rgba(0, 0, 0, 0.55);
             }
 
+            /* ── Header block ────────────────────────────────── */
             .dtt-popup-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: flex-start;
                 gap: 12px;
+                padding: 16px 18px 14px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
             }
 
             .dtt-popup-title {
-                font-size: 18px;
-                font-weight: 800;
-                letter-spacing: -0.02em;
-                font-family: "CircularSp", "Circular Std", "Arial", sans-serif;
+                font-size: 15px;
+                font-weight: 700;
+                letter-spacing: -0.01em;
+                color: #fff;
+                padding-top: 2px;
             }
 
             .dtt-popup-header-right {
                 display: flex;
                 flex-direction: column;
                 align-items: flex-end;
-                gap: 8px;
+                gap: 7px;
             }
 
+            /* ── Language switcher ───────────────────────────── */
             .dtt-language-switcher {
                 display: inline-flex;
                 align-items: center;
                 border-radius: 999px;
-                background: rgba(255, 255, 255, 0.07);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.09);
                 overflow: hidden;
+                gap: 1px;
+                padding: 2px;
             }
 
             .dtt-language-button {
                 border: 0;
                 background: transparent;
-                color: #b3b3b3;
-                padding: 6px 10px;
+                color: #737373;
+                padding: 3px 9px;
                 font: inherit;
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 700;
+                letter-spacing: 0.04em;
                 cursor: pointer;
+                border-radius: 999px;
                 transition: background 0.15s ease, color 0.15s ease;
             }
 
             .dtt-language-button:hover {
-                color: #fff;
+                color: #e0e0e0;
+                background: rgba(255, 255, 255, 0.07);
             }
 
             .dtt-language-button.is-active {
-                background: rgba(29, 185, 84, 0.18);
-                color: #1ed760;
+                background: #1ed760;
+                color: #000;
             }
 
+            /* ── Hint line ───────────────────────────────────── */
             .dtt-popup-hint {
-                color: #b3b3b3;
-                font-size: 12px;
+                color: #555;
+                font-size: 11px;
                 text-align: right;
+                letter-spacing: 0.01em;
             }
 
+            /* ── Retention control ───────────────────────────── */
             .dtt-retention-control {
                 display: inline-flex;
                 align-items: center;
-                gap: 8px;
-                color: #b3b3b3;
-                font-size: 12px;
+                gap: 7px;
+                color: #555;
+                font-size: 11px;
             }
 
             .dtt-retention-input {
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 999px;
-                background: rgba(255, 255, 255, 0.07);
-                color: #fff;
-                padding: 4px 10px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 8px;
+                background: rgba(255, 255, 255, 0.05);
+                color: #ccc;
+                padding: 3px 8px;
                 font: inherit;
+                font-size: 11px;
                 cursor: pointer;
-                width: 72px;
+                width: 56px;
+                text-align: center;
+                transition: border-color 0.15s ease, background 0.15s ease;
             }
 
+            .dtt-retention-input:focus {
+                outline: none;
+                border-color: rgba(30, 215, 96, 0.4);
+                background: rgba(30, 215, 96, 0.05);
+                color: #fff;
+            }
+
+            /* ── Summary card ────────────────────────────────── */
             .dtt-popup-summary {
                 display: flex;
-                justify-content: space-between;
-                align-items: baseline;
-                gap: 12px;
-                padding: 12px 14px;
-                border-radius: 10px;
-                background: rgba(29, 185, 84, 0.12);
-                color: #1ed760;
-                font-weight: 700;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+                padding: 20px 18px 18px;
+                background: linear-gradient(160deg, rgba(30, 215, 96, 0.09) 0%, rgba(30, 215, 96, 0.04) 100%);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            }
+
+            .dtt-popup-summary span {
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.07em;
+                text-transform: uppercase;
+                color: rgba(30, 215, 96, 0.6);
             }
 
             .dtt-popup-summary strong {
-                font-size: 22px;
+                font-size: 36px;
                 font-weight: 800;
+                letter-spacing: -0.03em;
+                color: #1ed760;
+                font-variant-numeric: tabular-nums;
+                line-height: 1;
             }
 
+            /* ── Sections wrapper (scrollable body) ──────────── */
             .dtt-popup-section {
                 display: flex;
                 flex-direction: column;
-                gap: 8px;
+                gap: 0;
                 min-height: 0;
+                padding: 14px 18px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             }
 
+            .dtt-popup-section:last-child {
+                border-bottom: 0;
+            }
+
+            /* ── Section headers ─────────────────────────────── */
             .dtt-popup-section-title {
-                font-size: 12px;
+                font-size: 10.5px;
                 font-weight: 700;
-                letter-spacing: 0.08em;
+                letter-spacing: 0.1em;
                 text-transform: uppercase;
-                color: #b3b3b3;
+                color: #484848;
+                margin-bottom: 8px;
             }
 
             .dtt-popup-section-heading {
@@ -670,36 +769,56 @@
                 align-items: center;
                 justify-content: space-between;
                 gap: 12px;
+                margin-bottom: 8px;
             }
 
+            .dtt-popup-section-heading .dtt-popup-section-title {
+                margin-bottom: 0;
+            }
+
+            /* ── Sessions list ───────────────────────────────── */
             .dtt-intervals-list {
                 overflow-y: auto;
                 min-height: 0;
-                padding-right: 4px;
             }
 
             .dtt-today-intervals-list {
                 max-height: min(32vh, 360px);
             }
 
+            .dtt-intervals-list::-webkit-scrollbar {
+                width: 3px;
+            }
+
+            .dtt-intervals-list::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            .dtt-intervals-list::-webkit-scrollbar-thumb {
+                background: rgba(255, 255, 255, 0.12);
+                border-radius: 999px;
+            }
+
+            /* ── Toggle button ───────────────────────────────── */
             .dtt-today-sessions-toggle {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 align-self: flex-start;
-                width: 32px;
-                height: 32px;
-                border: 1px solid rgba(255, 255, 255, 0.12);
+                width: 24px;
+                height: 24px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 999px;
-                background: rgba(255, 255, 255, 0.07);
-                color: #b3b3b3;
+                background: rgba(255, 255, 255, 0.05);
+                color: #666;
                 cursor: pointer;
-                transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+                transition: background 0.15s ease, color 0.15s ease;
+                flex-shrink: 0;
             }
 
             .dtt-today-sessions-toggle:hover {
-                background: rgba(255, 255, 255, 0.12);
-                color: #fff;
+                background: rgba(255, 255, 255, 0.1);
+                color: #ccc;
             }
 
             .dtt-today-sessions-toggle.is-expanded svg {
@@ -707,53 +826,172 @@
             }
 
             .dtt-today-sessions-toggle svg {
-                width: 16px;
-                height: 16px;
-                transition: transform 0.15s ease;
+                width: 13px;
+                height: 13px;
+                transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
             }
 
-            .dtt-intervals-list::-webkit-scrollbar {
-                width: 6px;
-            }
-
-            .dtt-intervals-list::-webkit-scrollbar-thumb {
-                background: #444;
-                border-radius: 999px;
-            }
-
+            /* ── Row items ───────────────────────────────────── */
             .dtt-interval-item {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 gap: 16px;
-                padding: 12px 0;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                padding: 8px 0;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+                transition: opacity 0.15s ease;
             }
 
             .dtt-interval-item:last-child {
                 border-bottom: 0;
             }
 
+            .dtt-interval-item:hover {
+                opacity: 0.85;
+            }
+
             .dtt-interval-range {
-                color: #fff;
-                font-size: 14px;
+                color: #c0c0c0;
+                font-size: 13px;
+                font-weight: 500;
             }
 
             .dtt-interval-duration {
-                color: #b3b3b3;
-                font-size: 14px;
+                color: #606060;
+                font-size: 13px;
+                font-variant-numeric: tabular-nums;
                 white-space: nowrap;
+                font-weight: 600;
             }
 
-            .dtt-interval-item.is-today .dtt-interval-range,
+            .dtt-interval-item.is-today .dtt-interval-range {
+                color: #e8e8e8;
+            }
+
             .dtt-interval-item.is-today .dtt-interval-duration {
                 color: #1ed760;
             }
 
+            /* ── Empty state ─────────────────────────────────── */
             .dtt-empty-state {
-                color: #b3b3b3;
-                padding: 12px 0 4px;
-                font-size: 14px;
+                color: #3a3a3a;
+                padding: 10px 0 6px;
+                font-size: 13px;
+                font-style: italic;
+            }
+
+            /* ── Settings gear button ────────────────────────── */
+            .dtt-settings-gear {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 26px;
+                height: 26px;
+                border-radius: 50%;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: rgba(255, 255, 255, 0.05);
+                color: #555;
+                cursor: pointer;
+                flex-shrink: 0;
+                transition: background 0.15s ease, color 0.15s ease, transform 0.2s ease;
+            }
+
+            .dtt-settings-gear:hover {
+                background: rgba(255, 255, 255, 0.1);
+                color: #ccc;
+                transform: rotate(40deg);
+            }
+
+            .dtt-settings-gear svg {
+                width: 13px;
+                height: 13px;
+            }
+
+            /* ── Settings back button ────────────────────────── */
+            .dtt-settings-back {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                border: none;
+                background: none;
+                color: #666;
+                font: inherit;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                padding: 2px 0;
+                transition: color 0.15s ease;
+            }
+
+            .dtt-settings-back:hover {
+                color: #ccc;
+            }
+
+            .dtt-settings-back svg {
+                width: 12px;
+                height: 12px;
+            }
+
+            /* ── Settings panel ──────────────────────────────── */
+            .dtt-popup-main {
+                display: flex;
+                flex-direction: column;
+                transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+
+            .dtt-popup-settings {
+                display: none;
+                flex-direction: column;
+                gap: 0;
+                animation: dtt-settings-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+            }
+
+            @keyframes dtt-settings-in {
+                from { opacity: 0; transform: translateX(10px); }
+                to   { opacity: 1; transform: translateX(0); }
+            }
+
+            #dtt-hover-popup.dtt-settings-open .dtt-popup-main {
+                display: none;
+            }
+
+            #dtt-hover-popup.dtt-settings-open .dtt-popup-settings {
+                display: flex;
+            }
+
+            /* ── Settings rows ───────────────────────────────── */
+            .dtt-settings-row {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                padding: 14px 18px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+
+            .dtt-settings-row:last-child {
+                border-bottom: 0;
+            }
+
+            .dtt-settings-row-label {
+                font-size: 10.5px;
+                font-weight: 700;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                color: #484848;
+            }
+
+            .dtt-settings-row-content {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            /* ── Retention value display ─────────────────────── */
+            .dtt-retention-suffix {
+                font-size: 13px;
+                font-weight: 500;
+                color: #555;
+                white-space: nowrap;
             }
         `;
         document.head.appendChild(style);
@@ -776,6 +1014,30 @@
         if (state.ui.timeNode) {
             state.ui.timeNode.textContent = formatDuration(totalSeconds);
         }
+    }
+
+    function isUiUpdateSuspended() {
+        return document.hidden || document.visibilityState === "hidden";
+    }
+
+    function setWidgetPausedState(isPaused, force = false) {
+        if (!state.ui.widget || (!force && isUiUpdateSuspended())) {
+            return;
+        }
+
+        state.ui.widget.classList.toggle("dtt-paused", isPaused);
+    }
+
+    function shouldWidgetBePaused() {
+        if (Spicetify.Player.isPlaying()) {
+            return false;
+        }
+
+        if (!state.currentSession) {
+            return true;
+        }
+
+        return state.silenceSeconds >= CONFIG.pauseSeconds;
     }
 
     function getDailySummaryRows(todayTotalSeconds = getComputedDayTotalSeconds()) {
@@ -875,6 +1137,7 @@
     function buildPopupContent(root) {
         root.innerHTML = "";
 
+        // ── Header (always visible) ──────────────────────────
         const header = document.createElement("div");
         header.className = "dtt-popup-header";
 
@@ -883,17 +1146,97 @@
         title.textContent = t("popupTitle");
 
         const headerRight = document.createElement("div");
-        headerRight.className = "dtt-popup-header-right";
+        headerRight.style.cssText = "display:flex;align-items:center;gap:8px;";
+
+        const hint = document.createElement("div");
+        hint.className = "dtt-popup-hint";
+
+        const gearBtn = document.createElement("button");
+        gearBtn.type = "button";
+        gearBtn.className = "dtt-settings-gear";
+        gearBtn.title = t("settingsTitle");
+        gearBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>`;
+        gearBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openSettings();
+        });
+
+        headerRight.append(hint, gearBtn);
+        header.append(title, headerRight);
+        root.appendChild(header);
+
+        // ── Main content panel ───────────────────────────────
+        const mainPanel = document.createElement("div");
+        mainPanel.className = "dtt-popup-main";
+
+        const summary = document.createElement("div");
+        summary.className = "dtt-popup-summary";
+        const dateNode = document.createElement("span");
+        const totalNode = document.createElement("strong");
+        summary.append(dateNode, totalNode);
+        mainPanel.appendChild(summary);
+
+        const intervalsSection = document.createElement("div");
+        intervalsSection.className = "dtt-popup-section";
+        const intervalsHeading = document.createElement("div");
+        intervalsHeading.className = "dtt-popup-section-heading";
+        const intervalsTitle = document.createElement("div");
+        intervalsTitle.className = "dtt-popup-section-title";
+        intervalsTitle.textContent = t("sessionsTodayTitle");
+        const intervalsList = document.createElement("div");
+        intervalsList.className = "dtt-intervals-list dtt-today-intervals-list";
+        const todaySessionsToggle = document.createElement("button");
+        todaySessionsToggle.type = "button";
+        todaySessionsToggle.className = "dtt-today-sessions-toggle";
+        todaySessionsToggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>`;
+        todaySessionsToggle.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            state.popup.todaySessionsExpanded = !state.popup.todaySessionsExpanded;
+            updatePopupDynamicContentV2();
+        });
+        intervalsHeading.append(intervalsTitle, todaySessionsToggle);
+        intervalsSection.append(intervalsHeading, intervalsList);
+        mainPanel.appendChild(intervalsSection);
+
+        const historySection = document.createElement("div");
+        historySection.className = "dtt-popup-section";
+        const historyTitle = document.createElement("div");
+        historyTitle.className = "dtt-popup-section-title";
+        historyTitle.textContent = t("historyTitle");
+        const historyList = document.createElement("div");
+        historyList.className = "dtt-intervals-list";
+        historySection.append(historyTitle, historyList);
+        mainPanel.appendChild(historySection);
+
+        root.appendChild(mainPanel);
+
+        // ── Settings panel ───────────────────────────────────
+        const settingsPanel = document.createElement("div");
+        settingsPanel.className = "dtt-popup-settings";
+
+        // Language row
+        const langRow = document.createElement("div");
+        langRow.className = "dtt-settings-row";
+        const langTitle = document.createElement("div");
+        langTitle.className = "dtt-settings-row-label";
+        langTitle.textContent = t("languageLabel");
+        const langContent = document.createElement("div");
+        langContent.className = "dtt-settings-row-content";
 
         const languageSwitcher = document.createElement("div");
         languageSwitcher.className = "dtt-language-switcher";
         state.popup.languageButtons = [];
-
         const languageOptions = [
             { code: "ru", label: t("languageRu") },
             { code: "en", label: t("languageEn") }
         ];
-
         for (const option of languageOptions) {
             const button = document.createElement("button");
             button.type = "button";
@@ -903,28 +1246,27 @@
             button.addEventListener("click", (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-
-                if (state.language === option.code) {
-                    return;
-                }
-
+                if (state.language === option.code) return;
                 state.language = option.code;
                 saveLanguage();
                 updateWidgetUI();
-                showPopup();
+                updatePopupStaticTextV2();
             });
             languageSwitcher.appendChild(button);
             state.popup.languageButtons.push(button);
         }
+        langContent.appendChild(languageSwitcher);
+        langRow.append(langTitle, langContent);
+        settingsPanel.appendChild(langRow);
 
-        const hint = document.createElement("div");
-        hint.className = "dtt-popup-hint";
-
-        const retentionControl = document.createElement("label");
-        retentionControl.className = "dtt-retention-control";
-
-        const retentionLabel = document.createElement("span");
-        retentionLabel.textContent = `${t("retentionLabel")}:`;
+        // Retention row
+        const retRow = document.createElement("div");
+        retRow.className = "dtt-settings-row";
+        const retTitle = document.createElement("div");
+        retTitle.className = "dtt-settings-row-label";
+        retTitle.textContent = t("retentionLabel");
+        const retContent = document.createElement("div");
+        retContent.className = "dtt-settings-row-content";
 
         const retentionInput = document.createElement("input");
         retentionInput.type = "number";
@@ -933,80 +1275,31 @@
         retentionInput.step = "1";
         retentionInput.value = String(state.historyRetentionMonths);
         retentionInput.className = "dtt-retention-input";
-        retentionInput.title = `1-${CONFIG.maxHistoryRetentionMonths} ${t("retentionSuffix")}`;
-
-        retentionInput.addEventListener("click", (event) => {
-            event.stopPropagation();
-        });
+        retentionInput.title = `1–${CONFIG.maxHistoryRetentionMonths}`;
+        retentionInput.addEventListener("click", (event) => event.stopPropagation());
         retentionInput.addEventListener("change", (event) => {
             event.stopPropagation();
             applyHistoryRetentionMonths(event.target.value);
             event.target.value = String(state.historyRetentionMonths);
+            if (state.popup.retentionSuffixNode) {
+                state.popup.retentionSuffixNode.textContent = getMonthsPlural(state.historyRetentionMonths);
+            }
             updatePopupStaticTextV2();
             updatePopupDynamicContentV2();
             updatePopupHistoryV2(getDailySummaryRows(getComputedDayTotalSeconds()));
         });
 
-        retentionControl.append(retentionLabel, retentionInput);
+        const retSuffix = document.createElement("span");
+        retSuffix.className = "dtt-retention-suffix";
+        retSuffix.textContent = getMonthsPlural(state.historyRetentionMonths);
 
-        headerRight.append(languageSwitcher, retentionControl, hint);
-        header.append(title, headerRight);
-        root.appendChild(header);
+        retContent.append(retentionInput, retSuffix);
+        retRow.append(retTitle, retContent);
+        settingsPanel.appendChild(retRow);
 
-        const summary = document.createElement("div");
-        summary.className = "dtt-popup-summary";
+        root.appendChild(settingsPanel);
 
-        const dateNode = document.createElement("span");
-        const totalNode = document.createElement("strong");
-
-        summary.append(dateNode, totalNode);
-        root.appendChild(summary);
-
-        const intervalsSection = document.createElement("div");
-        intervalsSection.className = "dtt-popup-section";
-
-        const intervalsHeading = document.createElement("div");
-        intervalsHeading.className = "dtt-popup-section-heading";
-
-        const intervalsTitle = document.createElement("div");
-        intervalsTitle.className = "dtt-popup-section-title";
-        intervalsTitle.textContent = t("sessionsTodayTitle");
-
-        const intervalsList = document.createElement("div");
-        intervalsList.className = "dtt-intervals-list dtt-today-intervals-list";
-
-        const todaySessionsToggle = document.createElement("button");
-        todaySessionsToggle.type = "button";
-        todaySessionsToggle.className = "dtt-today-sessions-toggle";
-        todaySessionsToggle.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-        `;
-        todaySessionsToggle.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            state.popup.todaySessionsExpanded = !state.popup.todaySessionsExpanded;
-            updatePopupDynamicContentV2();
-        });
-
-        intervalsHeading.append(intervalsTitle, todaySessionsToggle);
-        intervalsSection.append(intervalsHeading, intervalsList);
-        root.appendChild(intervalsSection);
-
-        const historySection = document.createElement("div");
-        historySection.className = "dtt-popup-section";
-
-        const historyTitle = document.createElement("div");
-        historyTitle.className = "dtt-popup-section-title";
-        historyTitle.textContent = t("historyTitle");
-
-        const historyList = document.createElement("div");
-        historyList.className = "dtt-intervals-list";
-
-        historySection.append(historyTitle, historyList);
-        root.appendChild(historySection);
-
+        // ── Save node refs ───────────────────────────────────
         state.popup.titleNode = title;
         state.popup.hintNode = hint;
         state.popup.summaryDateNode = dateNode;
@@ -1016,12 +1309,60 @@
         state.popup.todaySessionsToggleNode = todaySessionsToggle;
         state.popup.historyTitleNode = historyTitle;
         state.popup.historyListNode = historyList;
-        state.popup.retentionLabelNode = retentionLabel;
+        state.popup.retentionLabelNode = retTitle;
+        state.popup.retentionSuffixNode = retSuffix;
+        state.popup.settingsGearNode = gearBtn;
+        state.popup.settingsPanelNode = settingsPanel;
+        state.popup.settingsLangTitleNode = langTitle;
+        state.popup.settingsRetentionTitleNode = retTitle;
         state.popup.lastHistorySignature = "";
         state.popup.lastLanguage = state.language;
+        state.popup.settingsOpen = false;
+
         updatePopupStaticTextV2();
         updatePopupDynamicContentV2();
         updatePopupHistoryV2();
+    }
+
+    function openSettings() {
+        if (!state.popup.node) return;
+        state.popup.settingsOpen = true;
+        state.popup.node.classList.add("dtt-settings-open");
+        if (state.popup.titleNode) state.popup.titleNode.textContent = t("settingsTitle");
+        if (state.popup.settingsGearNode) {
+            state.popup.settingsGearNode.style.display = "none";
+        }
+        // Show back button if not already created
+        if (!state.popup.settingsBackNode) {
+            const backBtn = document.createElement("button");
+            backBtn.type = "button";
+            backBtn.className = "dtt-settings-back";
+            backBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>${t("settingsBack")}`;
+            backBtn.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeSettings();
+            });
+            // Insert back button into header right
+            const headerRight = state.popup.settingsGearNode?.parentElement;
+            if (headerRight) headerRight.insertBefore(backBtn, state.popup.settingsGearNode);
+            state.popup.settingsBackNode = backBtn;
+        } else {
+            state.popup.settingsBackNode.style.display = "";
+        }
+        positionPopup();
+    }
+
+    function closeSettings() {
+        if (!state.popup.node) return;
+        state.popup.settingsOpen = false;
+        state.popup.node.classList.remove("dtt-settings-open");
+        if (state.popup.titleNode) state.popup.titleNode.textContent = t("popupTitle");
+        if (state.popup.settingsGearNode) state.popup.settingsGearNode.style.display = "";
+        if (state.popup.settingsBackNode) state.popup.settingsBackNode.style.display = "none";
+        positionPopup();
     }
 
     function renderRows(listNode, rows) {
@@ -1117,7 +1458,9 @@
         }
 
         if (state.popup.titleNode) {
-            state.popup.titleNode.textContent = t("popupTitle");
+            state.popup.titleNode.textContent = state.popup.settingsOpen
+                ? t("settingsTitle")
+                : t("popupTitle");
         }
         if (state.popup.hintNode) {
             state.popup.hintNode.textContent = state.popup.isPinned ? t("popupHintPinned") : t("popupHintHover");
@@ -1128,8 +1471,22 @@
         if (state.popup.historyTitleNode) {
             state.popup.historyTitleNode.textContent = t("historyTitle");
         }
-        if (state.popup.retentionLabelNode) {
-            state.popup.retentionLabelNode.textContent = `${t("retentionLabel")}:`;
+        if (state.popup.settingsLangTitleNode) {
+            state.popup.settingsLangTitleNode.textContent = t("languageLabel");
+        }
+        if (state.popup.settingsRetentionTitleNode) {
+            state.popup.settingsRetentionTitleNode.textContent = t("retentionLabel");
+        }
+        if (state.popup.retentionSuffixNode) {
+            state.popup.retentionSuffixNode.textContent = getMonthsPlural(state.historyRetentionMonths);
+        }
+        if (state.popup.settingsGearNode) {
+            state.popup.settingsGearNode.title = t("settingsTitle");
+        }
+        if (state.popup.settingsBackNode) {
+            state.popup.settingsBackNode.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>${t("settingsBack")}`;
         }
         for (const button of state.popup.languageButtons ?? []) {
             button.classList.toggle("is-active", button.dataset.lang === state.language);
@@ -1267,6 +1624,14 @@
         state.popup.lastHistorySignature = "";
         state.popup.lastLanguage = null;
         state.popup.languageButtons = [];
+        state.popup.retentionLabelNode = null;
+        state.popup.retentionSuffixNode = null;
+        state.popup.settingsOpen = false;
+        state.popup.settingsGearNode = null;
+        state.popup.settingsBackNode = null;
+        state.popup.settingsPanelNode = null;
+        state.popup.settingsLangTitleNode = null;
+        state.popup.settingsRetentionTitleNode = null;
 
         state.popup.removeTimeoutId = setTimeout(() => {
             state.popup.removeTimeoutId = null;
@@ -1423,7 +1788,7 @@
         rolloverDayIfNeeded();
 
         if (Spicetify.Player.isPlaying()) {
-            state.ui.widget?.classList.remove("dtt-paused");
+            setWidgetPausedState(false);
             state.idleStartedAt = null;
             state.silenceSeconds = 0;
             startSession(now);
@@ -1431,7 +1796,7 @@
         }
 
         if (!state.currentSession) {
-            state.ui.widget?.classList.add("dtt-paused");
+            setWidgetPausedState(true);
             return;
         }
 
@@ -1442,11 +1807,11 @@
         state.silenceSeconds = Math.floor((now - state.idleStartedAt) / 1000);
 
         if (state.silenceSeconds < CONFIG.pauseSeconds) {
-            state.ui.widget?.classList.remove("dtt-paused");
+            setWidgetPausedState(false);
             return;
         }
 
-        state.ui.widget?.classList.add("dtt-paused");
+        setWidgetPausedState(true);
         closeSession(state.idleStartedAt + CONFIG.pauseSeconds * 1000);
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
@@ -1460,23 +1825,36 @@
         }
     }
 
+    function syncVisibleUI(now = Date.now()) {
+        if (isUiUpdateSuspended()) {
+            return;
+        }
+
+        const totalSeconds = getComputedDayTotalSeconds(now);
+        updateWidgetUI(totalSeconds);
+        setWidgetPausedState(shouldWidgetBePaused(), true);
+
+        if (state.popup.node) {
+            const dailySummaryRows = getDailySummaryRows(totalSeconds);
+            if (state.popup.lastLanguage !== state.language) {
+                updatePopupStaticTextV2();
+            }
+            updatePopupDynamicContentV2({
+                now,
+                totalSeconds,
+                todayIntervalRows: getTodayIntervalRows(now)
+            });
+            updatePopupHistoryV2(dailySummaryRows);
+            positionPopup();
+        }
+    }
+
     function startTrackingLoop() {
         state.runtime.intervalId = setInterval(() => {
             const now = Date.now();
             updateTrackingState(now);
-            const totalSeconds = getComputedDayTotalSeconds(now);
-            updateWidgetUI(totalSeconds);
-            if (state.popup.node) {
-                const dailySummaryRows = getDailySummaryRows(totalSeconds);
-                if (state.popup.lastLanguage !== state.language) {
-                    updatePopupStaticTextV2();
-                }
-                updatePopupDynamicContentV2({
-                    now,
-                    totalSeconds,
-                    todayIntervalRows: getTodayIntervalRows(now)
-                });
-                updatePopupHistoryV2(dailySummaryRows);
+            if (!isUiUpdateSuspended()) {
+                syncVisibleUI(now);
             }
             flushTodayIfNeeded();
         }, CONFIG.tickMs);
@@ -1499,8 +1877,15 @@
             saveTodayData();
         };
 
+        state.ui.visibilityHandler = () => {
+            if (!isUiUpdateSuspended()) {
+                syncVisibleUI();
+            }
+        };
+
         window.addEventListener("resize", state.ui.resizeHandler);
         window.addEventListener("beforeunload", state.ui.beforeUnloadHandler);
+        document.addEventListener("visibilitychange", state.ui.visibilityHandler);
     }
 
     function cleanup() {
@@ -1532,6 +1917,14 @@
         state.popup.historyListNode = null;
         state.popup.lastHistorySignature = "";
         state.popup.lastLanguage = null;
+        state.popup.retentionLabelNode = null;
+        state.popup.retentionSuffixNode = null;
+        state.popup.settingsOpen = false;
+        state.popup.settingsGearNode = null;
+        state.popup.settingsBackNode = null;
+        state.popup.settingsPanelNode = null;
+        state.popup.settingsLangTitleNode = null;
+        state.popup.settingsRetentionTitleNode = null;
         if (state.ui.resizeHandler) {
             window.removeEventListener("resize", state.ui.resizeHandler);
             state.ui.resizeHandler = null;
@@ -1539,6 +1932,10 @@
         if (state.ui.beforeUnloadHandler) {
             window.removeEventListener("beforeunload", state.ui.beforeUnloadHandler);
             state.ui.beforeUnloadHandler = null;
+        }
+        if (state.ui.visibilityHandler) {
+            document.removeEventListener("visibilitychange", state.ui.visibilityHandler);
+            state.ui.visibilityHandler = null;
         }
         state.popup.node?.remove();
         state.ui.widget?.remove();
