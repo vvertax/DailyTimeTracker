@@ -14,10 +14,16 @@
         return;
     }
 
+    const GLOBAL_RUNTIME_KEY = "__dtt_runtime_v1";
+    window[GLOBAL_RUNTIME_KEY]?.cleanup?.();
+
     const CONFIG = {
         storageKey: "dtt_today_v3",
         historyKey: "dtt_history_v2",
         languageKey: "dtt_language_v1",
+        retentionKey: "dtt_history_retention_months_v1",
+        historyRetentionMonths: 1,
+        maxHistoryRetentionMonths: 6,
         pauseSeconds: 30,
         saveIntervalSeconds: 10,
         tickMs: 1000,
@@ -27,7 +33,6 @@
         popupOffsetPx: 10,
         viewportMarginPx: 16,
         maxPopupWidthPx: 520,
-        estimatedPopupHeightPx: 540,
         topbarSelectors: [
             ".main-topBar-topbarContent",
             ".Root__top-bar header",
@@ -36,23 +41,46 @@
         ]
     };
 
+    let historyCache = null;
+
     const state = {
         day: loadTodayData(),
         language: loadLanguage(),
+        historyRetentionMonths: loadHistoryRetentionMonths(),
         currentSession: null,
         idleStartedAt: null,
         silenceSeconds: 0,
-        secondsSinceLastSave: 0,
         lastTickAt: Date.now(),
+        lastPersistAt: Date.now(),
         popup: {
             node: null,
             isPinned: false,
-            hideTimeoutId: null
+            hideTimeoutId: null,
+            removeTimeoutId: null,
+            hintNode: null,
+            titleNode: null,
+            summaryDateNode: null,
+            summaryTotalNode: null,
+            sessionsTitleNode: null,
+            intervalsListNode: null,
+            historyTitleNode: null,
+            historyListNode: null,
+            lastHistorySignature: "",
+            lastLanguage: null,
+            languageButtons: [],
+            retentionLabelNode: null
         },
         ui: {
             widget: null,
             timeNode: null,
-            pendingInjectCheck: false
+            pendingInjectCheck: false,
+            resizeHandler: null,
+            beforeUnloadHandler: null
+        },
+        runtime: {
+            intervalId: null,
+            injectObserver: null,
+            injectRetryTimeoutId: null
         }
     };
 
@@ -64,6 +92,10 @@
             popupHintHover: "Предпросмотр. Нажмите, чтобы закрепить.",
             todayLabel: "сегодня",
             emptyState: "Пока нет данных по дням.",
+            sessionsTodayTitle: "Сессии сегодня",
+            historyTitle: "История",
+            retentionLabel: "Сохранять историю",
+            retentionSuffix: "месяц(ев)",
             languageRu: "RU",
             languageEn: "ENG"
         },
@@ -74,6 +106,10 @@
             popupHintHover: "Hover preview. Click to pin.",
             todayLabel: "today",
             emptyState: "No daily history yet.",
+            sessionsTodayTitle: "Today Sessions",
+            historyTitle: "History",
+            retentionLabel: "Keep history",
+            retentionSuffix: "months",
             languageRu: "RU",
             languageEn: "ENG"
         }
@@ -85,16 +121,33 @@
     startWidgetInjection();
     startTrackingLoop();
     bindWindowEvents();
+    window[GLOBAL_RUNTIME_KEY] = {
+        cleanup
+    };
 
     console.log("[DailyTimeTracker] Ready.");
 
-    function getTodayString() {
-        const now = new Date();
-        return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-    }
-
     function pad2(value) {
         return String(value).padStart(2, "0");
+    }
+
+    function formatDateString(date) {
+        return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+    }
+
+    function getTodayString() {
+        return formatDateString(new Date());
+    }
+
+    function getHistoryCutoffString() {
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - state.historyRetentionMonths);
+        return formatDateString(cutoff);
+    }
+
+    function normalizeHistoryRetentionMonths(value) {
+        const normalized = Math.floor(Number(value) || CONFIG.historyRetentionMonths);
+        return Math.min(CONFIG.maxHistoryRetentionMonths, Math.max(1, normalized));
     }
 
     function formatDuration(totalSeconds) {
@@ -121,6 +174,14 @@
         } catch (error) {
             return fallback;
         }
+    }
+
+    function getIntervalDurationSeconds(interval) {
+        return Math.max(0, Math.floor((interval.end - interval.start) / 1000));
+    }
+
+    function getIntervalsTotalSeconds(intervals) {
+        return intervals.reduce((total, interval) => total + getIntervalDurationSeconds(interval), 0);
     }
 
     function normalizeInterval(interval) {
@@ -179,8 +240,52 @@
         };
     }
 
+    function pruneHistoryEntries(history) {
+        const cutoffString = getHistoryCutoffString();
+        let changed = false;
+        const prunedHistory = {};
+
+        for (const [date, entry] of Object.entries(history || {})) {
+            if (date < cutoffString) {
+                changed = true;
+                continue;
+            }
+
+            prunedHistory[date] = entry;
+        }
+
+        return {
+            history: prunedHistory,
+            changed
+        };
+    }
+
+    function loadHistoryData() {
+        if (historyCache === null) {
+            const parsedHistory = safeParse(Spicetify.LocalStorage.get(CONFIG.historyKey), {});
+            const { history, changed } = pruneHistoryEntries(parsedHistory);
+            historyCache = history;
+
+            if (changed) {
+                Spicetify.LocalStorage.set(CONFIG.historyKey, JSON.stringify(historyCache));
+            }
+        }
+
+        return historyCache;
+    }
+
     function readHistory() {
-        return safeParse(Spicetify.LocalStorage.get(CONFIG.historyKey), {});
+        return loadHistoryData();
+    }
+
+    function loadHistoryRetentionMonths() {
+        return normalizeHistoryRetentionMonths(
+            Spicetify.LocalStorage.get(CONFIG.retentionKey)
+        );
+    }
+
+    function saveHistoryRetentionMonths() {
+        Spicetify.LocalStorage.set(CONFIG.retentionKey, String(state.historyRetentionMonths));
     }
 
     function loadLanguage() {
@@ -197,15 +302,69 @@
     }
 
     function saveHistory(history) {
-        Spicetify.LocalStorage.set(CONFIG.historyKey, JSON.stringify(history));
+        historyCache = pruneHistoryEntries(history).history;
+        Spicetify.LocalStorage.set(CONFIG.historyKey, JSON.stringify(historyCache));
     }
 
-    function saveTodayData() {
-        Spicetify.LocalStorage.set(CONFIG.storageKey, JSON.stringify(state.day));
+    function applyHistoryRetentionMonths(nextValue) {
+        const normalized = normalizeHistoryRetentionMonths(nextValue);
+        if (normalized === state.historyRetentionMonths) {
+            return;
+        }
+
+        state.historyRetentionMonths = normalized;
+        saveHistoryRetentionMonths();
+        saveHistory(readHistory());
+    }
+
+    function getStoredDayTotalSeconds(day) {
+        const storedTotal = Math.max(0, Math.floor(Number(day?.totalSeconds) || 0));
+        const intervalsTotal = getIntervalsTotalSeconds(Array.isArray(day?.intervals) ? day.intervals : []);
+        return Math.max(storedTotal, intervalsTotal);
+    }
+
+    function getVisibleSessionInterval(now = Date.now()) {
+        if (!state.currentSession) {
+            return null;
+        }
+
+        const liveEnd = state.idleStartedAt === null
+            ? now
+            : Math.min(now, state.idleStartedAt + CONFIG.pauseSeconds * 1000);
+
+        return normalizeInterval({
+            start: state.currentSession.start,
+            end: liveEnd
+        });
+    }
+
+    function getComputedDayTotalSeconds(now = Date.now()) {
+        const intervalsTotal = getIntervalsTotalSeconds(state.day.intervals);
+        const visibleSession = getVisibleSessionInterval(now);
+        return intervalsTotal + (visibleSession ? getIntervalDurationSeconds(visibleSession) : 0);
+    }
+
+    function createPersistedDaySnapshot(now = Date.now()) {
+        return {
+            date: state.day.date,
+            totalSeconds: getComputedDayTotalSeconds(now),
+            intervals: state.day.intervals.map(cloneInterval)
+        };
+    }
+
+    function saveTodayData(now = Date.now()) {
+        const snapshot = createPersistedDaySnapshot(now);
+        state.lastPersistAt = now;
+        Spicetify.LocalStorage.set(CONFIG.storageKey, JSON.stringify(snapshot));
     }
 
     function archiveDay(day) {
-        if (!day || (day.totalSeconds <= 0 && day.intervals.length === 0)) {
+        if (!day) {
+            return;
+        }
+
+        const totalSeconds = getStoredDayTotalSeconds(day);
+        if (totalSeconds <= 0 && day.intervals.length === 0) {
             return;
         }
 
@@ -213,7 +372,7 @@
         const existing = normalizeHistoryEntry(history[day.date]);
 
         history[day.date] = {
-            totalSeconds: existing.totalSeconds + day.totalSeconds,
+            totalSeconds: existing.totalSeconds + totalSeconds,
             intervals: existing.intervals.concat(day.intervals.map(cloneInterval))
         };
 
@@ -249,14 +408,6 @@
             start: interval.start,
             end
         };
-    }
-
-    function addTrackedSeconds(secondsToAdd) {
-        const wholeSeconds = Math.max(0, Math.floor(secondsToAdd));
-        if (wholeSeconds <= 0) return;
-
-        state.day.totalSeconds += wholeSeconds;
-        state.secondsSinceLastSave += wholeSeconds;
     }
 
     function startSession(startAt) {
@@ -304,26 +455,12 @@
         state.day = createEmptyDay(today);
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
-        state.secondsSinceLastSave = 0;
         saveTodayData();
     }
 
-    function getLiveUiSeconds() {
-        return state.day.totalSeconds;
-    }
-
-    function getVisibleIntervals() {
+    function getVisibleIntervals(now = Date.now()) {
         const intervals = state.day.intervals.slice();
-
-        if (!state.currentSession) {
-            return intervals;
-        }
-
-        const liveEnd = Date.now() - Math.max(0, state.silenceSeconds - CONFIG.pauseSeconds) * 1000;
-        const visibleSession = normalizeInterval({
-            start: state.currentSession.start,
-            end: liveEnd
-        });
+        const visibleSession = getVisibleSessionInterval(now);
 
         if (visibleSession) {
             intervals.push(visibleSession);
@@ -333,15 +470,10 @@
     }
 
     function injectStyles() {
+        document.getElementById("dtt-styles")?.remove();
         const style = document.createElement("style");
+        style.id = "dtt-styles";
         style.textContent = `
-            @font-face {
-                font-family: "DTTCircular";
-                src: url("https://raw.githubusercontent.com/Holo-Host/holo-communities/refs/heads/master/public/assets/fonts/Circular-Font-Family/lineto-circular-medium.ttf") format("truetype");
-                font-weight: 500;
-                font-style: normal;
-            }
-
             #dtt-widget {
                 display: inline-flex;
                 align-items: center;
@@ -360,7 +492,7 @@
                 pointer-events: auto;
                 -webkit-app-region: no-drag;
                 app-region: no-drag;
-                font-family: "DTTCircular", "CircularSp", "Circular Std", "Circular", var(--font-family, sans-serif);
+                font-family: "CircularSp", "Circular Std", "Circular", var(--font-family, sans-serif);
             }
 
             #dtt-widget:hover {
@@ -400,7 +532,7 @@
                 border-radius: 14px;
                 background: #181818;
                 color: #fff;
-                font-family: "DTTCircular", "CircularSp", "Circular Std", "Circular", var(--font-family, sans-serif);
+                font-family: "CircularSp", "Circular Std", "Circular", var(--font-family, sans-serif);
                 box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
                 border: 1px solid rgba(255, 255, 255, 0.08);
                 opacity: 0;
@@ -431,6 +563,7 @@
                 font-size: 18px;
                 font-weight: 800;
                 letter-spacing: -0.02em;
+                font-family: "CircularSp", "Circular Std", "Arial", sans-serif;
             }
 
             .dtt-popup-header-right {
@@ -476,6 +609,25 @@
                 text-align: right;
             }
 
+            .dtt-retention-control {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                color: #b3b3b3;
+                font-size: 12px;
+            }
+
+            .dtt-retention-input {
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.07);
+                color: #fff;
+                padding: 4px 10px;
+                font: inherit;
+                cursor: pointer;
+                width: 72px;
+            }
+
             .dtt-popup-summary {
                 display: flex;
                 justify-content: space-between;
@@ -491,6 +643,20 @@
             .dtt-popup-summary strong {
                 font-size: 22px;
                 font-weight: 800;
+            }
+
+            .dtt-popup-section {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .dtt-popup-section-title {
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: #b3b3b3;
             }
 
             .dtt-intervals-list {
@@ -549,27 +715,26 @@
         const widget = document.createElement("div");
         widget.id = "dtt-widget";
         widget.title = t("widgetTitle");
-        widget.innerHTML = `<span id="dtt-time">${formatDuration(getLiveUiSeconds())}</span>`;
+        widget.innerHTML = `<span id="dtt-time">${formatDuration(getComputedDayTotalSeconds())}</span>`;
 
         state.ui.widget = widget;
         state.ui.timeNode = widget.querySelector("#dtt-time");
     }
 
-    function updateWidgetUI() {
+    function updateWidgetUI(totalSeconds = getComputedDayTotalSeconds()) {
         if (state.ui.widget) {
             state.ui.widget.title = t("widgetTitle");
         }
         if (state.ui.timeNode) {
-            state.ui.timeNode.textContent = formatDuration(getLiveUiSeconds());
+            state.ui.timeNode.textContent = formatDuration(totalSeconds);
         }
     }
 
-    function getDailySummaryRows() {
-        const history = readHistory();
+    function getDailySummaryRows(todayTotalSeconds = getComputedDayTotalSeconds()) {
         const merged = {
-            ...history,
+            ...readHistory(),
             [state.day.date]: {
-                totalSeconds: state.day.totalSeconds,
+                totalSeconds: todayTotalSeconds,
                 intervals: []
             }
         };
@@ -578,6 +743,17 @@
             .map(([date, entry]) => [date, normalizeHistoryEntry(entry)])
             .filter(([, entry]) => entry.totalSeconds > 0)
             .sort(([a], [b]) => b.localeCompare(a));
+    }
+
+    function getTodayIntervalRows(now = Date.now()) {
+        return getVisibleIntervals(now)
+            .slice()
+            .sort((a, b) => b.start - a.start)
+            .map((interval) => ({
+                key: `${interval.start}-${interval.end}`,
+                label: `${formatClockTime(interval.start)} - ${formatClockTime(interval.end)}`,
+                duration: formatDuration(getIntervalDurationSeconds(interval))
+            }));
     }
 
     function clearPopupHideTimeout() {
@@ -591,6 +767,13 @@
         if (state.popup.node) {
             return state.popup.node;
         }
+
+        if (state.popup.removeTimeoutId !== null) {
+            clearTimeout(state.popup.removeTimeoutId);
+            state.popup.removeTimeoutId = null;
+        }
+
+        document.getElementById("dtt-hover-popup")?.remove();
 
         const popupNode = document.createElement("div");
         popupNode.id = "dtt-hover-popup";
@@ -608,11 +791,12 @@
 
         document.body.appendChild(popupNode);
         state.popup.node = popupNode;
+        buildPopupContent(popupNode);
         return popupNode;
     }
 
-    function buildPopupContent() {
-        const root = document.createElement("div");
+    function buildPopupContent(root) {
+        root.innerHTML = "";
 
         const header = document.createElement("div");
         header.className = "dtt-popup-header";
@@ -626,6 +810,7 @@
 
         const languageSwitcher = document.createElement("div");
         languageSwitcher.className = "dtt-language-switcher";
+        state.popup.languageButtons = [];
 
         const languageOptions = [
             { code: "ru", label: t("languageRu") },
@@ -637,6 +822,7 @@
             button.type = "button";
             button.className = `dtt-language-button${state.language === option.code ? " is-active" : ""}`;
             button.textContent = option.label;
+            button.dataset.lang = option.code;
             button.addEventListener("click", (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -651,13 +837,42 @@
                 showPopup();
             });
             languageSwitcher.appendChild(button);
+            state.popup.languageButtons.push(button);
         }
 
         const hint = document.createElement("div");
         hint.className = "dtt-popup-hint";
-        hint.textContent = state.popup.isPinned ? t("popupHintPinned") : t("popupHintHover");
 
-        headerRight.append(languageSwitcher, hint);
+        const retentionControl = document.createElement("label");
+        retentionControl.className = "dtt-retention-control";
+
+        const retentionLabel = document.createElement("span");
+        retentionLabel.textContent = `${t("retentionLabel")}:`;
+
+        const retentionInput = document.createElement("input");
+        retentionInput.type = "number";
+        retentionInput.min = "1";
+        retentionInput.max = String(CONFIG.maxHistoryRetentionMonths);
+        retentionInput.step = "1";
+        retentionInput.value = String(state.historyRetentionMonths);
+        retentionInput.className = "dtt-retention-input";
+        retentionInput.title = `1-${CONFIG.maxHistoryRetentionMonths} ${t("retentionSuffix")}`;
+
+        retentionInput.addEventListener("click", (event) => {
+            event.stopPropagation();
+        });
+        retentionInput.addEventListener("change", (event) => {
+            event.stopPropagation();
+            applyHistoryRetentionMonths(event.target.value);
+            event.target.value = String(state.historyRetentionMonths);
+            updatePopupStaticTextV2();
+            updatePopupDynamicContentV2();
+            updatePopupHistoryV2(getDailySummaryRows(getComputedDayTotalSeconds()));
+        });
+
+        retentionControl.append(retentionLabel, retentionInput);
+
+        headerRight.append(languageSwitcher, retentionControl, hint);
         header.append(title, headerRight);
         root.appendChild(header);
 
@@ -665,46 +880,215 @@
         summary.className = "dtt-popup-summary";
 
         const dateNode = document.createElement("span");
-        dateNode.textContent = state.day.date;
-
         const totalNode = document.createElement("strong");
-        totalNode.textContent = formatDuration(getLiveUiSeconds());
 
         summary.append(dateNode, totalNode);
         root.appendChild(summary);
 
-        const list = document.createElement("div");
-        list.className = "dtt-intervals-list";
+        const intervalsSection = document.createElement("div");
+        intervalsSection.className = "dtt-popup-section";
 
-        const rows = getDailySummaryRows();
+        const intervalsTitle = document.createElement("div");
+        intervalsTitle.className = "dtt-popup-section-title";
+        intervalsTitle.textContent = t("sessionsTodayTitle");
+
+        const intervalsList = document.createElement("div");
+        intervalsList.className = "dtt-intervals-list";
+
+        intervalsSection.append(intervalsTitle, intervalsList);
+        root.appendChild(intervalsSection);
+
+        const historySection = document.createElement("div");
+        historySection.className = "dtt-popup-section";
+
+        const historyTitle = document.createElement("div");
+        historyTitle.className = "dtt-popup-section-title";
+        historyTitle.textContent = t("historyTitle");
+
+        const historyList = document.createElement("div");
+        historyList.className = "dtt-intervals-list";
+
+        historySection.append(historyTitle, historyList);
+        root.appendChild(historySection);
+
+        state.popup.titleNode = title;
+        state.popup.hintNode = hint;
+        state.popup.summaryDateNode = dateNode;
+        state.popup.summaryTotalNode = totalNode;
+        state.popup.sessionsTitleNode = intervalsTitle;
+        state.popup.intervalsListNode = intervalsList;
+        state.popup.historyTitleNode = historyTitle;
+        state.popup.historyListNode = historyList;
+        state.popup.retentionLabelNode = retentionLabel;
+        state.popup.lastHistorySignature = "";
+        state.popup.lastLanguage = state.language;
+        updatePopupStaticTextV2();
+        updatePopupDynamicContentV2();
+        updatePopupHistoryV2();
+    }
+
+    function renderRows(listNode, rows) {
+        listNode.innerHTML = "";
 
         if (rows.length === 0) {
             const empty = document.createElement("div");
             empty.className = "dtt-empty-state";
             empty.textContent = t("emptyState");
-            list.appendChild(empty);
-        } else {
-            for (const [date, entry] of rows) {
-                const item = document.createElement("div");
-                item.className = `dtt-interval-item${date === state.day.date ? " is-today" : ""}`;
-
-                const range = document.createElement("span");
-                range.className = "dtt-interval-range";
-                range.textContent = date === state.day.date
-                    ? `${date} (${t("todayLabel")})`
-                    : date;
-
-                const duration = document.createElement("span");
-                duration.className = "dtt-interval-duration";
-                duration.textContent = formatDuration(entry.totalSeconds);
-
-                item.append(range, duration);
-                list.appendChild(item);
-            }
+            listNode.appendChild(empty);
+            return;
         }
 
-        root.appendChild(list);
-        return root;
+        for (const row of rows) {
+            const item = document.createElement("div");
+            item.className = `dtt-interval-item${row.isToday ? " is-today" : ""}`;
+            if (row.key) {
+                item.dataset.key = row.key;
+            }
+
+            const range = document.createElement("span");
+            range.className = "dtt-interval-range";
+            range.textContent = row.label;
+
+            const duration = document.createElement("span");
+            duration.className = "dtt-interval-duration";
+            duration.textContent = row.duration;
+
+            item.append(range, duration);
+            listNode.appendChild(item);
+        }
+    }
+
+    function updatePopupContent(options = {}) {
+        if (!state.popup.node) {
+            return;
+        }
+
+        const now = options.now ?? Date.now();
+        const totalSeconds = options.totalSeconds ?? getComputedDayTotalSeconds(now);
+        const todayIntervalRows = options.todayIntervalRows ?? getTodayIntervalRows(now);
+        const dailySummaryRows = options.dailySummaryRows ?? getDailySummaryRows(totalSeconds);
+        if (state.popup.titleNode) {
+            state.popup.titleNode.textContent = t("popupTitle");
+        }
+        if (state.popup.hintNode) {
+            state.popup.hintNode.textContent = state.popup.isPinned ? t("popupHintPinned") : t("popupHintHover");
+        }
+        if (state.popup.summaryDateNode) {
+            state.popup.summaryDateNode.textContent = state.day.date;
+        }
+        if (state.popup.summaryTotalNode) {
+            state.popup.summaryTotalNode.textContent = formatDuration(totalSeconds);
+        }
+        if (state.popup.sessionsTitleNode) {
+            state.popup.sessionsTitleNode.textContent = state.language === "ru" ? "Сессии сегодня" : "Today sessions";
+        }
+        if (state.popup.historyTitleNode) {
+            state.popup.historyTitleNode.textContent = state.language === "ru" ? "История" : "History";
+        }
+        if (state.popup.intervalsListNode) {
+            renderRows(
+                state.popup.intervalsListNode,
+                todayIntervalRows.map((row) => ({
+                    ...row,
+                    isToday: true
+                }))
+            );
+        }
+        if (state.popup.historyListNode) {
+            renderRows(
+                state.popup.historyListNode,
+                dailySummaryRows.map(([date, entry]) => ({
+                    key: date,
+                    label: date === state.day.date ? `${date} (${t("todayLabel")})` : date,
+                    duration: formatDuration(entry.totalSeconds),
+                    isToday: date === state.day.date
+                }))
+            );
+        }
+    }
+
+    function createHistorySignature(rows) {
+        return rows
+            .map(([date, entry]) => `${date}:${entry.totalSeconds}`)
+            .join("|");
+    }
+
+    function updatePopupStaticTextV2() {
+        if (!state.popup.node) {
+            return;
+        }
+
+        if (state.popup.titleNode) {
+            state.popup.titleNode.textContent = t("popupTitle");
+        }
+        if (state.popup.hintNode) {
+            state.popup.hintNode.textContent = state.popup.isPinned ? t("popupHintPinned") : t("popupHintHover");
+        }
+        if (state.popup.sessionsTitleNode) {
+            state.popup.sessionsTitleNode.textContent = t("sessionsTodayTitle");
+        }
+        if (state.popup.historyTitleNode) {
+            state.popup.historyTitleNode.textContent = t("historyTitle");
+        }
+        if (state.popup.retentionLabelNode) {
+            state.popup.retentionLabelNode.textContent = `${t("retentionLabel")}:`;
+        }
+        for (const button of state.popup.languageButtons ?? []) {
+            button.classList.toggle("is-active", button.dataset.lang === state.language);
+        }
+        state.popup.lastLanguage = state.language;
+    }
+
+    function updatePopupDynamicContentV2(options = {}) {
+        if (!state.popup.node) {
+            return;
+        }
+
+        const now = options.now ?? Date.now();
+        const totalSeconds = options.totalSeconds ?? getComputedDayTotalSeconds(now);
+        const todayIntervalRows = options.todayIntervalRows ?? getTodayIntervalRows(now);
+
+        if (state.popup.hintNode) {
+            state.popup.hintNode.textContent = state.popup.isPinned ? t("popupHintPinned") : t("popupHintHover");
+        }
+        if (state.popup.summaryDateNode) {
+            state.popup.summaryDateNode.textContent = state.day.date;
+        }
+        if (state.popup.summaryTotalNode) {
+            state.popup.summaryTotalNode.textContent = formatDuration(totalSeconds);
+        }
+        if (state.popup.intervalsListNode) {
+            renderRows(
+                state.popup.intervalsListNode,
+                todayIntervalRows.map((row) => ({
+                    ...row,
+                    isToday: true
+                }))
+            );
+        }
+    }
+
+    function updatePopupHistoryV2(dailySummaryRows = getDailySummaryRows()) {
+        if (!state.popup.node || !state.popup.historyListNode) {
+            return;
+        }
+
+        const historySignature = `${state.language}|${createHistorySignature(dailySummaryRows)}`;
+        if (historySignature === state.popup.lastHistorySignature) {
+            return;
+        }
+
+        renderRows(
+            state.popup.historyListNode,
+            dailySummaryRows.map(([date, entry]) => ({
+                key: date,
+                label: date === state.day.date ? `${date} (${t("todayLabel")})` : date,
+                duration: formatDuration(entry.totalSeconds),
+                isToday: date === state.day.date
+            }))
+        );
+
+        state.popup.lastHistorySignature = historySignature;
     }
 
     function positionPopup() {
@@ -715,7 +1099,9 @@
         }
 
         const widgetRect = widget.getBoundingClientRect();
-        const popupWidth = Math.min(CONFIG.maxPopupWidthPx, window.innerWidth - 32);
+        const popupRect = popupNode.getBoundingClientRect();
+        const popupWidth = popupRect.width || Math.min(CONFIG.maxPopupWidthPx, window.innerWidth - 32);
+        const popupHeight = popupRect.height || 0;
         let left = widgetRect.left;
         let top = widgetRect.bottom + CONFIG.popupOffsetPx;
 
@@ -727,10 +1113,10 @@
             left = CONFIG.viewportMarginPx;
         }
 
-        if (top + CONFIG.estimatedPopupHeightPx > window.innerHeight - CONFIG.viewportMarginPx) {
+        if (top + popupHeight > window.innerHeight - CONFIG.viewportMarginPx) {
             top = Math.max(
                 CONFIG.viewportMarginPx,
-                widgetRect.top - CONFIG.estimatedPopupHeightPx - CONFIG.popupOffsetPx
+                widgetRect.top - popupHeight - CONFIG.popupOffsetPx
             );
         }
 
@@ -742,8 +1128,9 @@
         clearPopupHideTimeout();
 
         const popupNode = ensurePopup();
-        popupNode.innerHTML = "";
-        popupNode.appendChild(buildPopupContent());
+        updatePopupStaticTextV2();
+        updatePopupDynamicContentV2();
+        updatePopupHistoryV2();
         popupNode.classList.toggle("dtt-pinned", state.popup.isPinned);
         positionPopup();
 
@@ -768,8 +1155,20 @@
 
         popupNode.classList.remove("dtt-visible");
         state.popup.node = null;
+        state.popup.titleNode = null;
+        state.popup.hintNode = null;
+        state.popup.summaryDateNode = null;
+        state.popup.summaryTotalNode = null;
+        state.popup.sessionsTitleNode = null;
+        state.popup.intervalsListNode = null;
+        state.popup.historyTitleNode = null;
+        state.popup.historyListNode = null;
+        state.popup.lastHistorySignature = "";
+        state.popup.lastLanguage = null;
+        state.popup.languageButtons = [];
 
-        setTimeout(() => {
+        state.popup.removeTimeoutId = setTimeout(() => {
+            state.popup.removeTimeoutId = null;
             popupNode.remove();
         }, CONFIG.popupExitAnimationMs);
     }
@@ -881,7 +1280,12 @@
     }
 
     function scheduleInjectRetry() {
-        setTimeout(() => {
+        if (state.runtime.injectRetryTimeoutId !== null) {
+            clearTimeout(state.runtime.injectRetryTimeoutId);
+        }
+
+        state.runtime.injectRetryTimeoutId = setTimeout(() => {
+            state.runtime.injectRetryTimeoutId = null;
             if (!document.getElementById("dtt-widget")) {
                 injectWidget();
             }
@@ -909,10 +1313,10 @@
         });
 
         observer.observe(document.body, { childList: true, subtree: true });
+        state.runtime.injectObserver = observer;
     }
 
     function updateTrackingState(now) {
-        const elapsedSeconds = Math.max(1, Math.floor((now - state.lastTickAt) / 1000));
         state.lastTickAt = now;
 
         rolloverDayIfNeeded();
@@ -922,7 +1326,6 @@
             state.idleStartedAt = null;
             state.silenceSeconds = 0;
             startSession(now);
-            addTrackedSeconds(elapsedSeconds);
             return;
         }
 
@@ -939,7 +1342,6 @@
 
         if (state.silenceSeconds < CONFIG.pauseSeconds) {
             state.ui.widget?.classList.remove("dtt-paused");
-            addTrackedSeconds(elapsedSeconds);
             return;
         }
 
@@ -947,39 +1349,46 @@
         closeSession(state.idleStartedAt + CONFIG.pauseSeconds * 1000);
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
-        saveTodayData();
-    }
-
-    function refreshOpenPopupIfNeeded() {
-        if (state.popup.node) {
-            showPopup();
-        }
+        saveTodayData(now);
     }
 
     function flushTodayIfNeeded() {
-        if (state.secondsSinceLastSave >= CONFIG.saveIntervalSeconds) {
-            saveTodayData();
-            state.secondsSinceLastSave = 0;
+        const now = Date.now();
+        if (now - state.lastPersistAt >= CONFIG.saveIntervalSeconds * 1000) {
+            saveTodayData(now);
         }
     }
 
     function startTrackingLoop() {
-        setInterval(() => {
-            updateTrackingState(Date.now());
-            updateWidgetUI();
-            refreshOpenPopupIfNeeded();
+        state.runtime.intervalId = setInterval(() => {
+            const now = Date.now();
+            updateTrackingState(now);
+            const totalSeconds = getComputedDayTotalSeconds(now);
+            updateWidgetUI(totalSeconds);
+            if (state.popup.node) {
+                const dailySummaryRows = getDailySummaryRows(totalSeconds);
+                if (state.popup.lastLanguage !== state.language) {
+                    updatePopupStaticTextV2();
+                }
+                updatePopupDynamicContentV2({
+                    now,
+                    totalSeconds,
+                    todayIntervalRows: getTodayIntervalRows(now)
+                });
+                updatePopupHistoryV2(dailySummaryRows);
+            }
             flushTodayIfNeeded();
         }, CONFIG.tickMs);
     }
 
     function bindWindowEvents() {
-        window.addEventListener("resize", () => {
+        state.ui.resizeHandler = () => {
             if (state.popup.node) {
                 positionPopup();
             }
-        });
+        };
 
-        window.addEventListener("beforeunload", () => {
+        state.ui.beforeUnloadHandler = () => {
             clearPopupHideTimeout();
 
             if (state.currentSession) {
@@ -987,6 +1396,49 @@
             }
 
             saveTodayData();
-        });
+        };
+
+        window.addEventListener("resize", state.ui.resizeHandler);
+        window.addEventListener("beforeunload", state.ui.beforeUnloadHandler);
+    }
+
+    function cleanup() {
+        clearPopupHideTimeout();
+        if (state.runtime.intervalId !== null) {
+            clearInterval(state.runtime.intervalId);
+            state.runtime.intervalId = null;
+        }
+        state.runtime.injectObserver?.disconnect?.();
+        state.runtime.injectObserver = null;
+        if (state.runtime.injectRetryTimeoutId !== null) {
+            clearTimeout(state.runtime.injectRetryTimeoutId);
+            state.runtime.injectRetryTimeoutId = null;
+        }
+        if (state.popup.removeTimeoutId !== null) {
+            clearTimeout(state.popup.removeTimeoutId);
+            state.popup.removeTimeoutId = null;
+        }
+        state.popup.node = null;
+        state.popup.hintNode = null;
+        state.popup.titleNode = null;
+        state.popup.summaryDateNode = null;
+        state.popup.summaryTotalNode = null;
+        state.popup.sessionsTitleNode = null;
+        state.popup.intervalsListNode = null;
+        state.popup.historyTitleNode = null;
+        state.popup.historyListNode = null;
+        state.popup.lastHistorySignature = "";
+        state.popup.lastLanguage = null;
+        if (state.ui.resizeHandler) {
+            window.removeEventListener("resize", state.ui.resizeHandler);
+            state.ui.resizeHandler = null;
+        }
+        if (state.ui.beforeUnloadHandler) {
+            window.removeEventListener("beforeunload", state.ui.beforeUnloadHandler);
+            state.ui.beforeUnloadHandler = null;
+        }
+        state.popup.node?.remove();
+        state.ui.widget?.remove();
+        document.getElementById("dtt-styles")?.remove();
     }
 })();
