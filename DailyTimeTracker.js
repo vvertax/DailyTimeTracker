@@ -22,6 +22,8 @@
         historyKey: "dtt_history_v2",
         languageKey: "dtt_language_v1",
         retentionKey: "dtt_history_retention_months_v1",
+        carryOverTimerKey: "dtt_carry_over_timer_enabled_v1",
+        widgetCarryoverKey: "dtt_widget_carryover_v1",
         historyRetentionMonths: 1,
         maxHistoryRetentionMonths: 6,
         pauseSeconds: 30,
@@ -49,6 +51,8 @@
         day: loadTodayData(),
         language: loadLanguage(),
         historyRetentionMonths: loadHistoryRetentionMonths(),
+        carryOverTimerEnabled: loadCarryOverTimerEnabled(),
+        widgetCarryoverSeconds: loadWidgetCarryoverSeconds(),
         currentSession: null,
         idleStartedAt: null,
         silenceSeconds: 0,
@@ -79,7 +83,10 @@
             settingsBackNode: null,
             settingsPanelNode: null,
             settingsLangTitleNode: null,
-            settingsRetentionTitleNode: null
+            settingsRetentionTitleNode: null,
+            settingsCarryOverTitleNode: null,
+            settingsCarryOverHintNode: null,
+            settingsCarryOverInputNode: null
         },
         ui: {
             widget: null,
@@ -144,6 +151,10 @@
     };
 
     console.log("[DailyTimeTracker] Ready.");
+
+    if (!state.currentSession && !Spicetify.Player.isPlaying() && state.widgetCarryoverSeconds > 0) {
+        resetWidgetCarryover();
+    }
 
     function pad2(value) {
         return String(value).padStart(2, "0");
@@ -314,6 +325,25 @@
         );
     }
 
+    function loadCarryOverTimerEnabled() {
+        return Spicetify.LocalStorage.get(CONFIG.carryOverTimerKey) === "1";
+    }
+
+    function saveCarryOverTimerEnabled() {
+        Spicetify.LocalStorage.set(
+            CONFIG.carryOverTimerKey,
+            state.carryOverTimerEnabled ? "1" : "0"
+        );
+    }
+
+    function loadWidgetCarryoverSeconds() {
+        return Math.max(0, Math.floor(Number(Spicetify.LocalStorage.get(CONFIG.widgetCarryoverKey)) || 0));
+    }
+
+    function saveWidgetCarryoverSeconds() {
+        Spicetify.LocalStorage.set(CONFIG.widgetCarryoverKey, String(state.widgetCarryoverSeconds));
+    }
+
     function saveHistoryRetentionMonths() {
         Spicetify.LocalStorage.set(CONFIG.retentionKey, String(state.historyRetentionMonths));
     }
@@ -331,6 +361,22 @@
         return I18N[state.language][key];
     }
 
+    function getCarryOverTimerLabel() {
+        if (state.language === "ru") {
+            return "\u041d\u0435 \u0441\u0431\u0440\u0430\u0441\u044b\u0432\u0430\u0442\u044c \u0432\u0435\u0440\u0445\u043d\u0438\u0439 \u0442\u0430\u0439\u043c\u0435\u0440 \u043f\u043e\u0441\u043b\u0435 00:00";
+        }
+
+        return "Keep top timer running after 00:00";
+    }
+
+    function getCarryOverTimerHint() {
+        if (state.language === "ru") {
+            return "\u0412 \u0438\u0441\u0442\u043e\u0440\u0438\u0438 \u0434\u043d\u0435\u0439 \u0441\u0431\u0440\u043e\u0441 \u043e\u0441\u0442\u0430\u0435\u0442\u0441\u044f \u043e\u0431\u044b\u0447\u043d\u044b\u043c.";
+        }
+
+        return "Daily history still resets normally at midnight.";
+    }
+
     function saveHistory(history) {
         historyCache = pruneHistoryEntries(history).history;
         Spicetify.LocalStorage.set(CONFIG.historyKey, JSON.stringify(historyCache));
@@ -345,6 +391,39 @@
         state.historyRetentionMonths = normalized;
         saveHistoryRetentionMonths();
         saveHistory(readHistory());
+    }
+
+    function applyCarryOverTimerEnabled(nextValue) {
+        const normalized = Boolean(nextValue);
+        if (normalized === state.carryOverTimerEnabled) {
+            return;
+        }
+
+        state.carryOverTimerEnabled = normalized;
+        saveCarryOverTimerEnabled();
+
+        if (!normalized) {
+            resetWidgetCarryover();
+        }
+    }
+
+    function resetWidgetCarryover() {
+        if (state.widgetCarryoverSeconds === 0) {
+            return;
+        }
+
+        state.widgetCarryoverSeconds = 0;
+        saveWidgetCarryoverSeconds();
+    }
+
+    function addWidgetCarryover(secondsToAdd) {
+        const normalized = Math.max(0, Math.floor(Number(secondsToAdd) || 0));
+        if (normalized <= 0) {
+            return;
+        }
+
+        state.widgetCarryoverSeconds += normalized;
+        saveWidgetCarryoverSeconds();
     }
 
     function getStoredDayTotalSeconds(day) {
@@ -372,6 +451,13 @@
         const intervalsTotal = getIntervalsTotalSeconds(state.day.intervals);
         const visibleSession = getVisibleSessionInterval(now);
         return intervalsTotal + (visibleSession ? getIntervalDurationSeconds(visibleSession) : 0);
+    }
+
+    function getWidgetTotalSeconds(now = Date.now()) {
+        const dayTotalSeconds = getComputedDayTotalSeconds(now);
+        return state.carryOverTimerEnabled
+            ? state.widgetCarryoverSeconds + dayTotalSeconds
+            : dayTotalSeconds;
     }
 
     function createPersistedDaySnapshot(now = Date.now()) {
@@ -459,6 +545,7 @@
         }
 
         state.currentSession = null;
+        resetWidgetCarryover();
     }
 
     function rolloverDayIfNeeded() {
@@ -467,6 +554,7 @@
             return;
         }
 
+        let nextSessionStart = null;
         if (state.currentSession) {
             const midnight = getMidnightTimestamp(state.day.date);
             const cappedSession = clampIntervalEnd(
@@ -476,15 +564,21 @@
 
             if (cappedSession) {
                 state.day.intervals.push(cappedSession);
+                if (state.carryOverTimerEnabled) {
+                    addWidgetCarryover(getIntervalDurationSeconds(cappedSession));
+                    nextSessionStart = midnight;
+                }
             }
-
-            state.currentSession = null;
         }
 
         archiveDay(state.day);
         state.day = createEmptyDay(today);
+        state.currentSession = nextSessionStart ? { start: nextSessionStart, end: null } : null;
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
+        if (!nextSessionStart) {
+            resetWidgetCarryover();
+        }
         saveTodayData();
     }
 
@@ -524,7 +618,7 @@
                 pointer-events: auto;
                 -webkit-app-region: no-drag;
                 app-region: no-drag;
-                font-family: "CircularSp", "Circular Std", "Circular", var(--font-family, sans-serif);
+                font-family: "Spotify Mix", "SpotifyMixUI", var(--font-family, sans-serif);
             }
 
             #dtt-widget::before {
@@ -588,7 +682,7 @@
                 border-radius: 16px;
                 background: #111111;
                 color: #fff;
-                font-family: "CircularSp", "Circular Std", "Circular", var(--font-family, sans-serif);
+                font-family: "Spotify Mix", "SpotifyMixUI", var(--font-family, sans-serif);
                 box-shadow:
                     0 0 0 1px rgba(255, 255, 255, 0.07),
                     0 8px 24px rgba(0, 0, 0, 0.5),
@@ -986,6 +1080,27 @@
                 gap: 10px;
             }
 
+            .dtt-settings-row-content.is-between {
+                align-items: flex-start;
+                justify-content: space-between;
+            }
+
+            .dtt-settings-row-hint {
+                color: #6b6b6b;
+                font-size: 12px;
+                line-height: 1.35;
+                flex: 1;
+            }
+
+            .dtt-settings-checkbox {
+                width: 16px;
+                height: 16px;
+                margin-top: 1px;
+                accent-color: #1ed760;
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+
             /* ── Retention value display ─────────────────────── */
             .dtt-retention-suffix {
                 font-size: 13px;
@@ -1001,13 +1116,13 @@
         const widget = document.createElement("div");
         widget.id = "dtt-widget";
         widget.title = t("widgetTitle");
-        widget.innerHTML = `<span id="dtt-time">${formatDuration(getComputedDayTotalSeconds())}</span>`;
+        widget.innerHTML = `<span id="dtt-time">${formatDuration(getWidgetTotalSeconds())}</span>`;
 
         state.ui.widget = widget;
         state.ui.timeNode = widget.querySelector("#dtt-time");
     }
 
-    function updateWidgetUI(totalSeconds = getComputedDayTotalSeconds()) {
+    function updateWidgetUI(totalSeconds = getWidgetTotalSeconds()) {
         if (state.ui.widget) {
             state.ui.widget.title = t("widgetTitle");
         }
@@ -1297,6 +1412,32 @@
         retRow.append(retTitle, retContent);
         settingsPanel.appendChild(retRow);
 
+        const carryOverRow = document.createElement("div");
+        carryOverRow.className = "dtt-settings-row";
+        const carryOverTitle = document.createElement("div");
+        carryOverTitle.className = "dtt-settings-row-label";
+        carryOverTitle.textContent = getCarryOverTimerLabel();
+        const carryOverContent = document.createElement("div");
+        carryOverContent.className = "dtt-settings-row-content is-between";
+        const carryOverHint = document.createElement("div");
+        carryOverHint.className = "dtt-settings-row-hint";
+        carryOverHint.textContent = getCarryOverTimerHint();
+        const carryOverInput = document.createElement("input");
+        carryOverInput.type = "checkbox";
+        carryOverInput.className = "dtt-settings-checkbox";
+        carryOverInput.checked = state.carryOverTimerEnabled;
+        carryOverInput.addEventListener("click", (event) => event.stopPropagation());
+        carryOverInput.addEventListener("change", (event) => {
+            event.stopPropagation();
+            applyCarryOverTimerEnabled(event.target.checked);
+            updatePopupStaticTextV2();
+            syncVisibleUI();
+        });
+
+        carryOverContent.append(carryOverHint, carryOverInput);
+        carryOverRow.append(carryOverTitle, carryOverContent);
+        settingsPanel.appendChild(carryOverRow);
+
         root.appendChild(settingsPanel);
 
         // ── Save node refs ───────────────────────────────────
@@ -1315,6 +1456,9 @@
         state.popup.settingsPanelNode = settingsPanel;
         state.popup.settingsLangTitleNode = langTitle;
         state.popup.settingsRetentionTitleNode = retTitle;
+        state.popup.settingsCarryOverTitleNode = carryOverTitle;
+        state.popup.settingsCarryOverHintNode = carryOverHint;
+        state.popup.settingsCarryOverInputNode = carryOverInput;
         state.popup.lastHistorySignature = "";
         state.popup.lastLanguage = state.language;
         state.popup.settingsOpen = false;
@@ -1477,6 +1621,15 @@
         if (state.popup.settingsRetentionTitleNode) {
             state.popup.settingsRetentionTitleNode.textContent = t("retentionLabel");
         }
+        if (state.popup.settingsCarryOverTitleNode) {
+            state.popup.settingsCarryOverTitleNode.textContent = getCarryOverTimerLabel();
+        }
+        if (state.popup.settingsCarryOverHintNode) {
+            state.popup.settingsCarryOverHintNode.textContent = getCarryOverTimerHint();
+        }
+        if (state.popup.settingsCarryOverInputNode) {
+            state.popup.settingsCarryOverInputNode.checked = state.carryOverTimerEnabled;
+        }
         if (state.popup.retentionSuffixNode) {
             state.popup.retentionSuffixNode.textContent = getMonthsPlural(state.historyRetentionMonths);
         }
@@ -1632,6 +1785,9 @@
         state.popup.settingsPanelNode = null;
         state.popup.settingsLangTitleNode = null;
         state.popup.settingsRetentionTitleNode = null;
+        state.popup.settingsCarryOverTitleNode = null;
+        state.popup.settingsCarryOverHintNode = null;
+        state.popup.settingsCarryOverInputNode = null;
 
         state.popup.removeTimeoutId = setTimeout(() => {
             state.popup.removeTimeoutId = null;
@@ -1831,7 +1987,7 @@
         }
 
         const totalSeconds = getComputedDayTotalSeconds(now);
-        updateWidgetUI(totalSeconds);
+        updateWidgetUI(getWidgetTotalSeconds(now));
         setWidgetPausedState(shouldWidgetBePaused(), true);
 
         if (state.popup.node) {
@@ -1925,6 +2081,9 @@
         state.popup.settingsPanelNode = null;
         state.popup.settingsLangTitleNode = null;
         state.popup.settingsRetentionTitleNode = null;
+        state.popup.settingsCarryOverTitleNode = null;
+        state.popup.settingsCarryOverHintNode = null;
+        state.popup.settingsCarryOverInputNode = null;
         if (state.ui.resizeHandler) {
             window.removeEventListener("resize", state.ui.resizeHandler);
             state.ui.resizeHandler = null;
