@@ -86,8 +86,7 @@
             settingsRetentionTitleNode: null,
             settingsCarryOverTitleNode: null,
             settingsCarryOverHintNode: null,
-            settingsCarryOverInputNode: null,
-            lastHeight: 0
+            settingsCarryOverInputNode: null
         },
         ui: {
             widget: null,
@@ -1461,7 +1460,6 @@
         state.popup.settingsCarryOverHintNode = carryOverHint;
         state.popup.settingsCarryOverInputNode = carryOverInput;
         state.popup.lastHistorySignature = "";
-        state.popup.lastHeight = 0;
         state.popup.lastLanguage = state.language;
         state.popup.settingsOpen = false;
 
@@ -1539,6 +1537,56 @@
 
             item.append(range, duration);
             listNode.appendChild(item);
+        }
+    }
+
+    function updatePopupContent(options = {}) {
+        if (!state.popup.node) {
+            return;
+        }
+
+        const now = options.now ?? Date.now();
+        const totalSeconds = options.totalSeconds ?? getComputedDayTotalSeconds(now);
+        const todayIntervalRows = options.todayIntervalRows ?? getTodayIntervalRows(now);
+        const dailySummaryRows = options.dailySummaryRows ?? getDailySummaryRows(totalSeconds);
+        if (state.popup.titleNode) {
+            state.popup.titleNode.textContent = t("popupTitle");
+        }
+        if (state.popup.hintNode) {
+            state.popup.hintNode.textContent = state.popup.isPinned ? t("popupHintPinned") : t("popupHintHover");
+        }
+        if (state.popup.summaryDateNode) {
+            state.popup.summaryDateNode.textContent = state.day.date;
+        }
+        if (state.popup.summaryTotalNode) {
+            state.popup.summaryTotalNode.textContent = formatDuration(totalSeconds);
+        }
+        if (state.popup.sessionsTitleNode) {
+            state.popup.sessionsTitleNode.textContent = state.language === "ru" ? "Сессии сегодня" : "Today sessions";
+        }
+        if (state.popup.historyTitleNode) {
+            state.popup.historyTitleNode.textContent = state.language === "ru" ? "История" : "History";
+        }
+        if (state.popup.intervalsListNode) {
+            renderRows(
+                state.popup.intervalsListNode,
+                getDisplayedTodayIntervalRows(todayIntervalRows).map((row) => ({
+                    ...row,
+                    isToday: true
+                }))
+            );
+        }
+        updateTodaySessionsToggle(todayIntervalRows);
+        if (state.popup.historyListNode) {
+            renderRows(
+                state.popup.historyListNode,
+                dailySummaryRows.map(([date, entry]) => ({
+                    key: date,
+                    label: date === state.day.date ? `${date} (${t("todayLabel")})` : date,
+                    duration: formatDuration(entry.totalSeconds),
+                    isToday: date === state.day.date
+                }))
+            );
         }
     }
 
@@ -1727,7 +1775,6 @@
         state.popup.historyTitleNode = null;
         state.popup.historyListNode = null;
         state.popup.lastHistorySignature = "";
-        state.popup.lastHeight = 0;
         state.popup.lastLanguage = null;
         state.popup.languageButtons = [];
         state.popup.retentionLabelNode = null;
@@ -1940,11 +1987,7 @@
         }
 
         const totalSeconds = getComputedDayTotalSeconds(now);
-        updateWidgetUI(
-            state.carryOverTimerEnabled
-                ? state.widgetCarryoverSeconds + totalSeconds
-                : totalSeconds
-        );
+        updateWidgetUI(getWidgetTotalSeconds(now));
         setWidgetPausedState(shouldWidgetBePaused(), true);
 
         if (state.popup.node) {
@@ -1958,11 +2001,7 @@
                 todayIntervalRows: getTodayIntervalRows(now)
             });
             updatePopupHistoryV2(dailySummaryRows);
-            const popupHeight = state.popup.node.offsetHeight;
-            if (popupHeight !== state.popup.lastHeight) {
-                state.popup.lastHeight = popupHeight;
-                positionPopup();
-            }
+            positionPopup();
         }
     }
 
@@ -2033,7 +2072,6 @@
         state.popup.historyTitleNode = null;
         state.popup.historyListNode = null;
         state.popup.lastHistorySignature = "";
-        state.popup.lastHeight = 0;
         state.popup.lastLanguage = null;
         state.popup.retentionLabelNode = null;
         state.popup.retentionSuffixNode = null;
