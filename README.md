@@ -72,6 +72,10 @@ The extension uses `Spicetify.LocalStorage` to persist your data across sessions
 - **Reliability:** Includes a cleanup routine to prevent memory leaks or UI glitches when Spicetify is reloaded or updated.
 - **Disclaimer:** The code is provided as-is. Changes to Spotify's internal structure may require updates to this extension.
 
+## Roadmap
+
+See the [Roadmap](./ROADMAP.md) for planned features and upcoming improvements.
+
 ## License
 
 See [`LICENSE`](./LICENSE).
