@@ -7,7 +7,9 @@ Tracks how much time you spend listening to Spotify each day and shows a timer i
 > [!NOTE]
 > This codebase was written with the help of ChatGPT.
 
-![Preview](./preview.png)
+<p align="center">
+  <img src="./preview.png" alt="Preview">
+</p>
 
 ## Features
 
