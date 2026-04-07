@@ -23,7 +23,10 @@
         languageKey: "dtt_language_v1",
         retentionKey: "dtt_history_retention_months_v1",
         carryOverTimerKey: "dtt_carry_over_timer_enabled_v1",
+        longStreakProgressionKey: "dtt_long_streak_progression_enabled_v1",
         widgetCarryoverKey: "dtt_widget_carryover_v1",
+        streakKey: "dtt_streak_v1",
+        streakThresholdSeconds: 300,
         historyRetentionMonths: 1,
         maxHistoryRetentionMonths: 6,
         pauseSeconds: 30,
@@ -37,6 +40,8 @@
         maxPopupWidthPx: 520,
         todaySessionsToggleThreshold: 5,
         collapsedTodaySessionsCount: 1,
+        historyToggleThreshold: 5,
+        collapsedHistoryCount: 3,
         topbarSelectors: [
             ".main-topBar-topbarContent",
             ".Root__top-bar header",
@@ -48,11 +53,13 @@
     let historyCache = null;
 
     const state = {
-        day: loadTodayData(),
+        day: null,
         language: loadLanguage(),
         historyRetentionMonths: loadHistoryRetentionMonths(),
         carryOverTimerEnabled: loadCarryOverTimerEnabled(),
+        longStreakProgressionEnabled: loadLongStreakProgressionEnabled(),
         widgetCarryoverSeconds: loadWidgetCarryoverSeconds(),
+        streak: loadStreakData(),
         currentSession: null,
         idleStartedAt: null,
         silenceSeconds: 0,
@@ -73,6 +80,8 @@
             todaySessionsExpanded: false,
             historyTitleNode: null,
             historyListNode: null,
+            historyToggleNode: null,
+            historyExpanded: false,
             lastHistorySignature: "",
             lastLanguage: null,
             languageButtons: [],
@@ -87,6 +96,20 @@
             settingsCarryOverTitleNode: null,
             settingsCarryOverHintNode: null,
             settingsCarryOverInputNode: null,
+            settingsStreakProgressionTitleNode: null,
+            settingsStreakProgressionHintNode: null,
+            settingsStreakProgressionInputNode: null,
+            settingsStreakProgressionPreviewNode: null,
+            exportTitleNode: null,
+            exportCsvBtnNode: null,
+            exportJsonBtnNode: null,
+            resetDataTitleNode: null,
+            resetDataHintNode: null,
+            resetTodayBtnNode: null,
+            clearHistoryBtnNode: null,
+            fullWipeBtnNode: null,
+            popupFireNode: null,
+            popupStreakCountNode: null,
             lastHeight: 0
         },
         ui: {
@@ -100,9 +123,13 @@
         runtime: {
             intervalId: null,
             injectObserver: null,
-            injectRetryTimeoutId: null
+            injectRetryTimeoutId: null,
+            _streakTestMode: false,
+            _lastTrackUri: null
         }
     };
+
+    state.day = loadTodayData();
 
     const I18N = {
         ru: {
@@ -120,7 +147,23 @@
             settingsBack: "Назад",
             languageLabel: "Язык",
             languageRu: "RU",
-            languageEn: "ENG"
+            languageEn: "ENG",
+            streakLabel: "Серия",
+            streakDays: "дн.",
+            streakProgressionLabel: "Длинная прогрессия серии",
+            streakProgressionHint: "Добавляет больше цветовых уровней и переносит белый максимум на 500+.",
+            streakProgressionTiersLabel: "Активные уровни",
+            exportTitle: "Экспорт данных",
+            exportCsv: "Скачать CSV",
+            exportJson: "Скачать JSON",
+            resetDataTitle: "Очистка / Сброс данных",
+            resetDataHint: "Действия необратимы. Перед полным сбросом лучше экспортировать данные.",
+            resetToday: "Сбросить сегодня",
+            clearHistory: "Очистить историю",
+            fullWipe: "Полный сброс",
+            confirmResetToday: "Сбросить данные за сегодня? История останется нетронутой.",
+            confirmClearHistory: "Очистить всю архивную историю? Данные за сегодня останутся.",
+            confirmFullWipe: "Полностью удалить все данные Daily Time Tracker и сбросить настройки?"
         },
         en: {
             widgetTitle: "Click to pin statistics",
@@ -137,9 +180,57 @@
             settingsBack: "Back",
             languageLabel: "Language",
             languageRu: "RU",
-            languageEn: "ENG"
+            languageEn: "ENG",
+            streakLabel: "Streak",
+            streakDays: "d",
+            streakProgressionLabel: "Long streak progression",
+            streakProgressionHint: "Adds more color tiers and moves white max tier to 500+.",
+            streakProgressionTiersLabel: "Active tiers",
+            exportTitle: "Export data",
+            exportCsv: "Download CSV",
+            exportJson: "Download JSON",
+            resetDataTitle: "Clear / Reset Data",
+            resetDataHint: "These actions are irreversible. Export your data before a full wipe.",
+            resetToday: "Reset today",
+            clearHistory: "Clear history",
+            fullWipe: "Full wipe",
+            confirmResetToday: "Reset today's data? History will be kept.",
+            confirmClearHistory: "Clear all archived history? Today's data will be kept.",
+            confirmFullWipe: "Delete all Daily Time Tracker data and reset settings?"
         }
     };
+
+    const SHORT_STREAK_TIERS = [
+        { min: 2, outer: "#FF6B1A", inner: "#FFD54F", text: "#FF6B1A", glow: "rgba(255,107,26,0.5)" },
+        { min: 14, outer: "#EF4444", inner: "#FCA5A5", text: "#EF4444", glow: "rgba(239,68,68,0.5)" },
+        { min: 30, outer: "#EC4899", inner: "#F9A8D4", text: "#EC4899", glow: "rgba(236,72,153,0.5)" },
+        { min: 60, outer: "#D946EF", inner: "#F0ABFC", text: "#F0ABFC", glow: "rgba(217,70,239,0.5)" },
+        { exact: 67, outer: "#F2C64E", inner: "#F8E08E", text: "#F2C64E", glow: "rgba(242,198,78,0.5)", hidden: true },
+        { min: 100, outer: "#A855F7", inner: "#D8B4FE", text: "#A855F7", glow: "rgba(168,85,247,0.5)" },
+        { min: 150, outer: "#3B82F6", inner: "#93C5FD", text: "#3B82F6", glow: "rgba(59,130,246,0.5)" },
+        { min: 200, outer: "#40E0D0", inner: "#7FFFD4", text: "#40E0D0", glow: "rgba(64,224,208,0.5)" },
+        { min: 250, outer: "#FFFFFF", inner: "#E0E0E0", text: "#FFFFFF", glow: "rgba(255,255,255,0.5)" },
+        { min: 2000, outer: "#B3F24E", inner: "#DCF8A0", text: "#B3F24E", glow: "rgba(179,242,78,0.55)", hidden: true }
+    ];
+
+    const LONG_STREAK_TIERS = [
+        { min: 2, outer: "#FF6B1A", inner: "#FFD54F", text: "#FF6B1A", glow: "rgba(255,107,26,0.5)" },
+        { min: 7, outer: "#FF9F1C", inner: "#FFD27A", text: "#FF9F1C", glow: "rgba(255,159,28,0.5)" },
+        { min: 14, outer: "#EF4444", inner: "#FCA5A5", text: "#EF4444", glow: "rgba(239,68,68,0.5)" },
+        { min: 30, outer: "#EC4899", inner: "#F9A8D4", text: "#EC4899", glow: "rgba(236,72,153,0.5)" },
+        { min: 60, outer: "#D946EF", inner: "#F0ABFC", text: "#F0ABFC", glow: "rgba(217,70,239,0.5)" },
+        { exact: 67, outer: "#F2C64E", inner: "#F8E08E", text: "#F2C64E", glow: "rgba(242,198,78,0.5)", hidden: true },
+        { min: 100, outer: "#A855F7", inner: "#D8B4FE", text: "#A855F7", glow: "rgba(168,85,247,0.5)" },
+        { min: 150, outer: "#3B82F6", inner: "#93C5FD", text: "#3B82F6", glow: "rgba(59,130,246,0.5)" },
+        { min: 200, outer: "#40E0D0", inner: "#7FFFD4", text: "#40E0D0", glow: "rgba(64,224,208,0.5)" },
+        { min: 225, outer: "#9DECF9", inner: "#D8F8FF", text: "#9DECF9", glow: "rgba(157,236,249,0.5)" },
+        { min: 250, outer: "#67E8F9", inner: "#CFFAFE", text: "#67E8F9", glow: "rgba(103,232,249,0.5)" },
+        { min: 275, outer: "#34D399", inner: "#A7F3D0", text: "#34D399", glow: "rgba(52,211,153,0.5)" },
+        { min: 300, outer: "#6EE7B7", inner: "#A7F3D0", text: "#6EE7B7", glow: "rgba(110,231,183,0.5)" },
+        { min: 380, outer: "#C0C0C0", inner: "#E5E7EB", text: "#C0C0C0", glow: "rgba(192,192,192,0.5)" },
+        { min: 500, outer: "#FFFFFF", inner: "#E0E0E0", text: "#FFFFFF", glow: "rgba(255,255,255,0.55)" },
+        { min: 2000, outer: "#B3F24E", inner: "#DCF8A0", text: "#B3F24E", glow: "rgba(179,242,78,0.55)", hidden: true }
+    ];
 
     injectStyles();
     createWidget();
@@ -151,7 +242,21 @@
         cleanup
     };
 
-    console.log("[DailyTimeTracker] Ready.");
+    computeStreak();
+
+    // ── TEMP: test streak colors ──
+    window.dttSetStreak = function (n) {
+        state.runtime._streakTestMode = true;
+        state.streak.current = Number(n) || 0;
+        updatePopupFireIcon();
+        console.log("[DailyTimeTracker] Streak set to", state.streak.current, "| color:", getStreakColor());
+    };
+    window.dttResetStreak = function () {
+        state.runtime._streakTestMode = false;
+        computeStreak();
+        updatePopupFireIcon();
+        console.log("[DailyTimeTracker] Streak reset to real value:", state.streak.current);
+    };
 
     if (!state.currentSession && !Spicetify.Player.isPlaying() && state.widgetCarryoverSeconds > 0) {
         resetWidgetCarryover();
@@ -304,16 +409,16 @@
 
     function loadHistoryData() {
         if (historyCache === null) {
-            const parsedHistory = safeParse(Spicetify.LocalStorage.get(CONFIG.historyKey), {});
-            const { history, changed } = pruneHistoryEntries(parsedHistory);
+            const parsedHistory = readRawHistory();
+            const { history } = pruneHistoryEntries(parsedHistory);
             historyCache = history;
-
-            if (changed) {
-                Spicetify.LocalStorage.set(CONFIG.historyKey, JSON.stringify(historyCache));
-            }
         }
 
         return historyCache;
+    }
+
+    function readRawHistory() {
+        return safeParse(Spicetify.LocalStorage.get(CONFIG.historyKey), {});
     }
 
     function readHistory() {
@@ -327,13 +432,25 @@
     }
 
     function loadCarryOverTimerEnabled() {
-        return Spicetify.LocalStorage.get(CONFIG.carryOverTimerKey) === "1";
+        Spicetify.LocalStorage.set(CONFIG.carryOverTimerKey, "0");
+        return false;
+    }
+
+    function loadLongStreakProgressionEnabled() {
+        return Spicetify.LocalStorage.get(CONFIG.longStreakProgressionKey) === "1";
     }
 
     function saveCarryOverTimerEnabled() {
         Spicetify.LocalStorage.set(
             CONFIG.carryOverTimerKey,
             state.carryOverTimerEnabled ? "1" : "0"
+        );
+    }
+
+    function saveLongStreakProgressionEnabled() {
+        Spicetify.LocalStorage.set(
+            CONFIG.longStreakProgressionKey,
+            state.longStreakProgressionEnabled ? "1" : "0"
         );
     }
 
@@ -372,15 +489,23 @@
 
     function getCarryOverTimerHint() {
         if (state.language === "ru") {
-            return "\u0412 \u0438\u0441\u0442\u043e\u0440\u0438\u0438 \u0434\u043d\u0435\u0439 \u0441\u0431\u0440\u043e\u0441 \u043e\u0441\u0442\u0430\u0435\u0442\u0441\u044f \u043e\u0431\u044b\u0447\u043d\u044b\u043c.";
+            return "\u0424\u0443\u043d\u043a\u0446\u0438\u044f \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u043e \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u0430, \u043f\u043e\u0442\u043e\u043c\u0443 \u0447\u0442\u043e \u0441\u0435\u0439\u0447\u0430\u0441 \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u0442 \u043d\u0435\u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043d\u043e.";
         }
 
-        return "Daily history still resets normally at midnight.";
+        return "This feature is temporarily disabled because it currently does not work correctly.";
+    }
+
+    function getCarryOverTimerDisabledTooltip() {
+        if (state.language === "ru") {
+            return "\u0424\u0443\u043d\u043a\u0446\u0438\u044f \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u043e \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u0430, \u0442\u0430\u043a \u043a\u0430\u043a \u0441\u0435\u0439\u0447\u0430\u0441 \u043d\u0435 \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u0442.";
+        }
+
+        return "Feature temporarily disabled because it does not work right now.";
     }
 
     function saveHistory(history) {
         historyCache = pruneHistoryEntries(history).history;
-        Spicetify.LocalStorage.set(CONFIG.historyKey, JSON.stringify(historyCache));
+        Spicetify.LocalStorage.set(CONFIG.historyKey, JSON.stringify(history || {}));
     }
 
     function applyHistoryRetentionMonths(nextValue) {
@@ -391,7 +516,7 @@
 
         state.historyRetentionMonths = normalized;
         saveHistoryRetentionMonths();
-        saveHistory(readHistory());
+        historyCache = null;
     }
 
     function applyCarryOverTimerEnabled(nextValue) {
@@ -406,6 +531,101 @@
         if (!normalized) {
             resetWidgetCarryover();
         }
+    }
+
+    function applyLongStreakProgressionEnabled(nextValue) {
+        const normalized = Boolean(nextValue);
+        if (normalized === state.longStreakProgressionEnabled) {
+            return;
+        }
+
+        state.longStreakProgressionEnabled = normalized;
+        saveLongStreakProgressionEnabled();
+    }
+
+    function loadStreakData() {
+        const fallback = { current: 0, best: 0, lastDate: "" };
+        return safeParse(Spicetify.LocalStorage.get(CONFIG.streakKey), fallback);
+    }
+
+    function saveStreakData() {
+        Spicetify.LocalStorage.set(CONFIG.streakKey, JSON.stringify(state.streak));
+    }
+
+    function loadStreakThreshold() {
+        return CONFIG.streakThresholdSeconds;
+    }
+
+    function computeStreak() {
+        const history = readRawHistory();
+        const today = getTodayString();
+        const todayTotal = getComputedDayTotalSeconds();
+        const threshold = CONFIG.streakThresholdSeconds;
+
+        const allDays = { ...history };
+        allDays[today] = { totalSeconds: todayTotal, intervals: [] };
+
+        let current = 0;
+        const dateObj = new Date();
+
+        for (let i = 0; i < 400; i++) {
+            const dateStr = formatDateString(dateObj);
+            const entry = allDays[dateStr];
+            const dayTotal = entry ? Math.max(0, Math.floor(Number(entry.totalSeconds) || 0)) : 0;
+
+            if (i === 0) {
+                if (dayTotal >= threshold) {
+                    current++;
+                }
+            } else {
+                if (dayTotal >= threshold) {
+                    current++;
+                } else {
+                    break;
+                }
+            }
+
+            dateObj.setDate(dateObj.getDate() - 1);
+        }
+
+        state.streak.current = current;
+        if (current > state.streak.best) {
+            state.streak.best = current;
+        }
+        state.streak.lastDate = today;
+        saveStreakData();
+    }
+
+    function getActiveStreakTiers() {
+        return state.longStreakProgressionEnabled
+            ? LONG_STREAK_TIERS
+            : SHORT_STREAK_TIERS;
+    }
+
+    function getStreakTierPreviewText() {
+        return getActiveStreakTiers()
+            .filter((tier) => !tier.hidden)
+            .map((tier) => `${tier.min}+`)
+            .join(" • ");
+    }
+
+    function getStreakColor() {
+        const s = state.streak.current;
+        const tiers = getActiveStreakTiers();
+
+        for (let i = tiers.length - 1; i >= 0; i--) {
+            if (typeof tiers[i].exact === "number" && s === tiers[i].exact) {
+                return tiers[i];
+            }
+        }
+
+        for (let i = tiers.length - 1; i >= 0; i--) {
+            if (typeof tiers[i].min === "number" && s >= tiers[i].min) {
+                return tiers[i];
+            }
+        }
+
+        return tiers[0];
     }
 
     function resetWidgetCarryover() {
@@ -462,10 +682,15 @@
     }
 
     function createPersistedDaySnapshot(now = Date.now()) {
+        const intervals = state.day.intervals.map(cloneInterval);
+        const liveInterval = getVisibleSessionInterval(now);
+        if (liveInterval) {
+            intervals.push(liveInterval);
+        }
         return {
             date: state.day.date,
             totalSeconds: getComputedDayTotalSeconds(now),
-            intervals: state.day.intervals.map(cloneInterval)
+            intervals
         };
     }
 
@@ -473,6 +698,110 @@
         const snapshot = createPersistedDaySnapshot(now);
         state.lastPersistAt = now;
         Spicetify.LocalStorage.set(CONFIG.storageKey, JSON.stringify(snapshot));
+    }
+
+    // ── Export helpers ────────────────────────────────────
+    function getExportData() {
+        const history = readHistory();
+        const todayTotal = getComputedDayTotalSeconds();
+        const merged = { ...history };
+        merged[state.day.date] = {
+            totalSeconds: todayTotal,
+            intervals: state.day.intervals.map(cloneInterval)
+        };
+        return Object.entries(merged)
+            .map(([date, entry]) => [date, normalizeHistoryEntry(entry)])
+            .filter(([, entry]) => entry.totalSeconds > 0)
+            .sort(([a], [b]) => a.localeCompare(b));
+    }
+
+    function exportCsv() {
+        const rows = getExportData();
+        const lines = ["date,seconds,duration"];
+        for (const [date, entry] of rows) {
+            lines.push(`${date},${entry.totalSeconds},${formatDuration(entry.totalSeconds)}`);
+        }
+        downloadFile("DailyTimeTracker.csv", lines.join("\n"), "text/csv");
+    }
+
+    function exportJson() {
+        const rows = getExportData();
+        const data = {};
+        for (const [date, entry] of rows) {
+            data[date] = entry;
+        }
+        downloadFile("DailyTimeTracker.json", JSON.stringify(data, null, 2), "application/json");
+    }
+
+    function downloadFile(filename, content, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    function confirmDestructiveAction(message) {
+        return window.confirm(message);
+    }
+
+    function clearStoredValue(key) {
+        Spicetify.LocalStorage.set(key, "");
+    }
+
+    function resetRuntimeAfterDataChange(now = Date.now(), options = {}) {
+        const keepCurrentSession = Boolean(options.keepCurrentSession);
+
+        state.runtime._streakTestMode = false;
+        state.day = createEmptyDay(getTodayString());
+        state.currentSession = keepCurrentSession && Spicetify.Player.isPlaying()
+            ? { start: now, end: null }
+            : null;
+        state.idleStartedAt = null;
+        state.silenceSeconds = 0;
+        resetWidgetCarryover();
+        saveTodayData(now);
+        computeStreak();
+        syncVisibleUI(now);
+        updatePopupHistoryV2(getDailySummaryRows(getComputedDayTotalSeconds(now)));
+    }
+
+    function resetTodayData() {
+        resetRuntimeAfterDataChange(Date.now(), { keepCurrentSession: true });
+    }
+
+    function clearHistoryData() {
+        saveHistory({});
+        computeStreak();
+        syncVisibleUI();
+        updatePopupHistoryV2(getDailySummaryRows(getComputedDayTotalSeconds()));
+    }
+
+    function fullWipeData() {
+        const now = Date.now();
+
+        saveHistory({});
+        clearStoredValue(CONFIG.historyKey);
+        clearStoredValue(CONFIG.languageKey);
+        clearStoredValue(CONFIG.retentionKey);
+        clearStoredValue(CONFIG.carryOverTimerKey);
+        clearStoredValue(CONFIG.longStreakProgressionKey);
+        clearStoredValue(CONFIG.widgetCarryoverKey);
+        clearStoredValue(CONFIG.streakKey);
+
+        state.language = "ru";
+        state.historyRetentionMonths = CONFIG.historyRetentionMonths;
+        state.carryOverTimerEnabled = false;
+        state.longStreakProgressionEnabled = false;
+        state.widgetCarryoverSeconds = 0;
+        state.streak = { current: 0, best: 0, lastDate: "" };
+
+        resetRuntimeAfterDataChange(now, { keepCurrentSession: true });
+        updatePopupStaticTextV2();
     }
 
     function archiveDay(day) {
@@ -485,7 +814,7 @@
             return;
         }
 
-        const history = readHistory();
+        const history = readRawHistory();
         const existing = normalizeHistoryEntry(history[day.date]);
 
         history[day.date] = {
@@ -554,6 +883,8 @@
         if (today === state.day.date) {
             return;
         }
+
+        computeStreak();
 
         let nextSessionStart = null;
         if (state.currentSession) {
@@ -636,6 +967,51 @@
             #dtt-widget.dtt-paused::before {
                 background: #555;
                 box-shadow: none;
+            }
+
+            /* ── Fire icon (popup) ─────────────────────────────── */
+            .dtt-fire-wrap {
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+                flex-shrink: 0;
+            }
+
+            .dtt-fire-wrap[hidden] {
+                display: none;
+            }
+
+            .dtt-fire-icon {
+                width: 20px;
+                height: 20px;
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                line-height: 0;
+            }
+
+            .dtt-fire-icon svg {
+                width: 100%;
+                height: 100%;
+                display: block;
+            }
+
+            .dtt-fire-icon.dtt-fire-glow {
+                filter: drop-shadow(0 0 4px var(--dtt-fire-glow, rgba(255,107,26,0.5)));
+                animation: dtt-fire-pulse 1.8s ease-in-out infinite;
+            }
+
+            @keyframes dtt-fire-pulse {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.12); }
+            }
+
+            .dtt-streak-count {
+                font-size: 13px;
+                font-weight: 700;
+                font-variant-numeric: tabular-nums;
+                line-height: 1;
+                transition: color 0.3s ease;
             }
 
             #dtt-widget:hover {
@@ -1102,6 +1478,32 @@
                 flex-shrink: 0;
             }
 
+            .dtt-settings-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .dtt-settings-danger-button {
+                border: 1px solid rgba(239, 68, 68, 0.25);
+                border-radius: 999px;
+                background: rgba(239, 68, 68, 0.1);
+                color: #fca5a5;
+                padding: 6px 11px;
+                font: inherit;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.02em;
+                cursor: pointer;
+                transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+            }
+
+            .dtt-settings-danger-button:hover {
+                background: rgba(239, 68, 68, 0.18);
+                border-color: rgba(248, 113, 113, 0.4);
+                color: #fecaca;
+            }
+
             /* ── Retention value display ─────────────────────── */
             .dtt-retention-suffix {
                 font-size: 13px;
@@ -1111,6 +1513,11 @@
             }
         `;
         document.head.appendChild(style);
+    }
+
+    function createFireSvg(colors) {
+        const c = colors || getStreakColor();
+        return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 23C7.58 23 4 19.42 4 15C4 11.83 5.67 9.17 6.84 7.84C7.12 7.52 7.62 7.66 7.71 8.07C8.08 9.74 8.97 12.01 11.03 13.27C11.03 12.03 11.14 10.15 12.14 8.41C13.28 6.41 15.17 5.08 16.04 4.51C16.34 4.32 16.73 4.52 16.75 4.88C16.85 6.52 17.17 9.66 18.53 11.56C19.47 12.87 20 14.19 20 15C20 19.42 16.42 23 12 23Z" fill="${c.outer}"/><path d="M12.5 22C10.29 22 8.5 20.21 8.5 18C8.5 16.42 9.42 15.17 9.96 14.55C10.13 14.35 10.43 14.42 10.5 14.68C10.65 15.22 11.07 16.01 11.95 16.42C11.98 15.85 12.13 14.98 12.69 14.21C13.16 13.57 13.72 13.16 14.01 12.97C14.18 12.86 14.39 12.98 14.39 13.18C14.42 13.86 14.55 15.17 15.11 15.95C15.47 16.44 15.5 17.5 15.5 18C15.5 20.21 14.71 22 12.5 22Z" fill="${c.inner}"/></svg>`;
     }
 
     function createWidget() {
@@ -1130,6 +1537,27 @@
         if (state.ui.timeNode) {
             state.ui.timeNode.textContent = formatDuration(totalSeconds);
         }
+    }
+
+    function updatePopupFireIcon() {
+        const fireNode = state.popup.popupFireNode;
+        const countNode = state.popup.popupStreakCountNode;
+        const wrap = fireNode?.closest(".dtt-fire-wrap");
+        if (!wrap) return;
+
+        const s = state.streak.current;
+        if (s < 2) {
+            wrap.hidden = true;
+            return;
+        }
+
+        wrap.hidden = false;
+        const colors = getStreakColor();
+        fireNode.innerHTML = createFireSvg(colors);
+        fireNode.classList.toggle("dtt-fire-glow", s >= 3);
+        fireNode.style.setProperty("--dtt-fire-glow", colors.glow);
+        countNode.textContent = String(s);
+        countNode.style.color = colors.text;
     }
 
     function isUiUpdateSuspended() {
@@ -1190,13 +1618,21 @@
         return todayIntervalRows.slice(0, CONFIG.collapsedTodaySessionsCount);
     }
 
+    function getDisplayedHistoryRows(dailySummaryRows) {
+        if (state.popup.historyExpanded) {
+            return dailySummaryRows;
+        }
+
+        return dailySummaryRows.slice(0, CONFIG.collapsedHistoryCount);
+    }
+
     function updateTodaySessionsToggle(todayIntervalRows) {
         const toggleNode = state.popup.todaySessionsToggleNode;
         if (!toggleNode) {
             return;
         }
 
-        const shouldShowToggle = todayIntervalRows.length > CONFIG.todaySessionsToggleThreshold;
+        const shouldShowToggle = todayIntervalRows.length >= CONFIG.todaySessionsToggleThreshold;
         toggleNode.hidden = !shouldShowToggle;
 
         if (!shouldShowToggle) {
@@ -1209,6 +1645,27 @@
             state.popup.todaySessionsExpanded ? "Hide extra sessions" : "Show all sessions"
         );
         toggleNode.title = state.popup.todaySessionsExpanded ? "Hide extra sessions" : "Show all sessions";
+    }
+
+    function updateHistoryToggle(dailySummaryRows) {
+        const toggleNode = state.popup.historyToggleNode;
+        if (!toggleNode) {
+            return;
+        }
+
+        const shouldShowToggle = dailySummaryRows.length >= CONFIG.historyToggleThreshold;
+        toggleNode.hidden = !shouldShowToggle;
+
+        if (!shouldShowToggle) {
+            state.popup.historyExpanded = false;
+        }
+
+        toggleNode.classList.toggle("is-expanded", state.popup.historyExpanded);
+        toggleNode.setAttribute(
+            "aria-label",
+            state.popup.historyExpanded ? "Hide extra days" : "Show all days"
+        );
+        toggleNode.title = state.popup.historyExpanded ? "Hide extra days" : "Show all days";
     }
 
     function clearPopupHideTimeout() {
@@ -1264,6 +1721,17 @@
         const headerRight = document.createElement("div");
         headerRight.style.cssText = "display:flex;align-items:center;gap:8px;";
 
+        const fireWrap = document.createElement("span");
+        fireWrap.className = "dtt-fire-wrap";
+        fireWrap.hidden = true;
+        const fireIconEl = document.createElement("span");
+        fireIconEl.className = "dtt-fire-icon";
+        fireIconEl.innerHTML = createFireSvg();
+        const fireCount = document.createElement("span");
+        fireCount.className = "dtt-streak-count";
+        fireCount.textContent = "";
+        fireWrap.append(fireIconEl, fireCount);
+
         const hint = document.createElement("div");
         hint.className = "dtt-popup-hint";
 
@@ -1281,7 +1749,7 @@
             openSettings();
         });
 
-        headerRight.append(hint, gearBtn);
+        headerRight.append(fireWrap, hint, gearBtn);
         header.append(title, headerRight);
         root.appendChild(header);
 
@@ -1294,6 +1762,7 @@
         const dateNode = document.createElement("span");
         const totalNode = document.createElement("strong");
         summary.append(dateNode, totalNode);
+
         mainPanel.appendChild(summary);
 
         const intervalsSection = document.createElement("div");
@@ -1323,12 +1792,27 @@
 
         const historySection = document.createElement("div");
         historySection.className = "dtt-popup-section";
+        const historyHeading = document.createElement("div");
+        historyHeading.className = "dtt-popup-section-heading";
         const historyTitle = document.createElement("div");
         historyTitle.className = "dtt-popup-section-title";
         historyTitle.textContent = t("historyTitle");
+        const historyToggle = document.createElement("button");
+        historyToggle.type = "button";
+        historyToggle.className = "dtt-today-sessions-toggle";
+        historyToggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>`;
+        historyToggle.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            state.popup.historyExpanded = !state.popup.historyExpanded;
+            updatePopupHistoryV2();
+        });
         const historyList = document.createElement("div");
         historyList.className = "dtt-intervals-list";
-        historySection.append(historyTitle, historyList);
+        historyHeading.append(historyTitle, historyToggle);
+        historySection.append(historyHeading, historyList);
         mainPanel.appendChild(historySection);
 
         root.appendChild(mainPanel);
@@ -1420,24 +1904,152 @@
         carryOverTitle.textContent = getCarryOverTimerLabel();
         const carryOverContent = document.createElement("div");
         carryOverContent.className = "dtt-settings-row-content is-between";
+        carryOverContent.title = getCarryOverTimerDisabledTooltip();
         const carryOverHint = document.createElement("div");
         carryOverHint.className = "dtt-settings-row-hint";
         carryOverHint.textContent = getCarryOverTimerHint();
+        carryOverHint.title = getCarryOverTimerDisabledTooltip();
         const carryOverInput = document.createElement("input");
         carryOverInput.type = "checkbox";
         carryOverInput.className = "dtt-settings-checkbox";
-        carryOverInput.checked = state.carryOverTimerEnabled;
-        carryOverInput.addEventListener("click", (event) => event.stopPropagation());
-        carryOverInput.addEventListener("change", (event) => {
+        carryOverInput.checked = false;
+        carryOverInput.title = getCarryOverTimerDisabledTooltip();
+        carryOverInput.setAttribute("aria-disabled", "true");
+        carryOverInput.style.opacity = "0.55";
+        carryOverInput.style.cursor = "not-allowed";
+        carryOverInput.addEventListener("click", (event) => {
+            event.preventDefault();
             event.stopPropagation();
-            applyCarryOverTimerEnabled(event.target.checked);
-            updatePopupStaticTextV2();
-            syncVisibleUI();
+            carryOverInput.checked = false;
+        });
+        carryOverInput.addEventListener("change", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            event.target.checked = false;
         });
 
         carryOverContent.append(carryOverHint, carryOverInput);
         carryOverRow.append(carryOverTitle, carryOverContent);
         settingsPanel.appendChild(carryOverRow);
+
+        const streakProgressionRow = document.createElement("div");
+        streakProgressionRow.className = "dtt-settings-row";
+        const streakProgressionTitle = document.createElement("div");
+        streakProgressionTitle.className = "dtt-settings-row-label";
+        streakProgressionTitle.textContent = t("streakProgressionLabel");
+        const streakProgressionContent = document.createElement("div");
+        streakProgressionContent.className = "dtt-settings-row-content is-between";
+        const streakProgressionHint = document.createElement("div");
+        streakProgressionHint.className = "dtt-settings-row-hint";
+        streakProgressionHint.textContent = t("streakProgressionHint");
+        const streakProgressionInput = document.createElement("input");
+        streakProgressionInput.type = "checkbox";
+        streakProgressionInput.className = "dtt-settings-checkbox";
+        streakProgressionInput.checked = state.longStreakProgressionEnabled;
+        streakProgressionInput.addEventListener("click", (event) => event.stopPropagation());
+        streakProgressionInput.addEventListener("change", (event) => {
+            event.stopPropagation();
+            applyLongStreakProgressionEnabled(event.target.checked);
+            updatePopupStaticTextV2();
+            updatePopupFireIcon();
+            syncVisibleUI();
+        });
+        streakProgressionContent.append(streakProgressionHint, streakProgressionInput);
+
+        const streakProgressionPreview = document.createElement("div");
+        streakProgressionPreview.className = "dtt-settings-row-hint";
+        streakProgressionPreview.textContent = `${t("streakProgressionTiersLabel")}: ${getStreakTierPreviewText()}`;
+
+        streakProgressionRow.append(streakProgressionTitle, streakProgressionContent, streakProgressionPreview);
+        settingsPanel.appendChild(streakProgressionRow);
+
+        // Export row
+        const exportRow = document.createElement("div");
+        exportRow.className = "dtt-settings-row";
+        const exportTitle = document.createElement("div");
+        exportTitle.className = "dtt-settings-row-label";
+        exportTitle.textContent = t("exportTitle");
+        const exportContent = document.createElement("div");
+        exportContent.className = "dtt-settings-row-content";
+        exportContent.style.cssText = "display:flex;gap:8px;";
+
+        const csvBtn = document.createElement("button");
+        csvBtn.type = "button";
+        csvBtn.className = "dtt-language-button";
+        csvBtn.textContent = t("exportCsv");
+        csvBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            exportCsv();
+        });
+
+        const jsonBtn = document.createElement("button");
+        jsonBtn.type = "button";
+        jsonBtn.className = "dtt-language-button";
+        jsonBtn.textContent = t("exportJson");
+        jsonBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            exportJson();
+        });
+
+        exportContent.append(csvBtn, jsonBtn);
+        exportRow.append(exportTitle, exportContent);
+        settingsPanel.appendChild(exportRow);
+
+        const resetRow = document.createElement("div");
+        resetRow.className = "dtt-settings-row";
+        const resetTitle = document.createElement("div");
+        resetTitle.className = "dtt-settings-row-label";
+        resetTitle.textContent = t("resetDataTitle");
+        const resetHint = document.createElement("div");
+        resetHint.className = "dtt-settings-row-hint";
+        resetHint.textContent = t("resetDataHint");
+        const resetActions = document.createElement("div");
+        resetActions.className = "dtt-settings-actions";
+
+        const resetTodayBtn = document.createElement("button");
+        resetTodayBtn.type = "button";
+        resetTodayBtn.className = "dtt-settings-danger-button";
+        resetTodayBtn.textContent = t("resetToday");
+        resetTodayBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!confirmDestructiveAction(t("confirmResetToday"))) {
+                return;
+            }
+            resetTodayData();
+        });
+
+        const clearHistoryBtn = document.createElement("button");
+        clearHistoryBtn.type = "button";
+        clearHistoryBtn.className = "dtt-settings-danger-button";
+        clearHistoryBtn.textContent = t("clearHistory");
+        clearHistoryBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!confirmDestructiveAction(t("confirmClearHistory"))) {
+                return;
+            }
+            clearHistoryData();
+        });
+
+        const fullWipeBtn = document.createElement("button");
+        fullWipeBtn.type = "button";
+        fullWipeBtn.className = "dtt-settings-danger-button";
+        fullWipeBtn.textContent = t("fullWipe");
+        fullWipeBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!confirmDestructiveAction(t("confirmFullWipe"))) {
+                return;
+            }
+            fullWipeData();
+        });
+
+        resetActions.append(resetTodayBtn, clearHistoryBtn, fullWipeBtn);
+        resetRow.append(resetTitle, resetHint, resetActions);
+        settingsPanel.appendChild(resetRow);
 
         root.appendChild(settingsPanel);
 
@@ -1451,6 +2063,7 @@
         state.popup.todaySessionsToggleNode = todaySessionsToggle;
         state.popup.historyTitleNode = historyTitle;
         state.popup.historyListNode = historyList;
+        state.popup.historyToggleNode = historyToggle;
         state.popup.retentionLabelNode = retTitle;
         state.popup.retentionSuffixNode = retSuffix;
         state.popup.settingsGearNode = gearBtn;
@@ -1460,6 +2073,20 @@
         state.popup.settingsCarryOverTitleNode = carryOverTitle;
         state.popup.settingsCarryOverHintNode = carryOverHint;
         state.popup.settingsCarryOverInputNode = carryOverInput;
+        state.popup.settingsStreakProgressionTitleNode = streakProgressionTitle;
+        state.popup.settingsStreakProgressionHintNode = streakProgressionHint;
+        state.popup.settingsStreakProgressionInputNode = streakProgressionInput;
+        state.popup.settingsStreakProgressionPreviewNode = streakProgressionPreview;
+        state.popup.exportTitleNode = exportTitle;
+        state.popup.exportCsvBtnNode = csvBtn;
+        state.popup.exportJsonBtnNode = jsonBtn;
+        state.popup.resetDataTitleNode = resetTitle;
+        state.popup.resetDataHintNode = resetHint;
+        state.popup.resetTodayBtnNode = resetTodayBtn;
+        state.popup.clearHistoryBtnNode = clearHistoryBtn;
+        state.popup.fullWipeBtnNode = fullWipeBtn;
+        state.popup.popupFireNode = fireIconEl;
+        state.popup.popupStreakCountNode = fireCount;
         state.popup.lastHistorySignature = "";
         state.popup.lastHeight = 0;
         state.popup.lastLanguage = state.language;
@@ -1468,6 +2095,7 @@
         updatePopupStaticTextV2();
         updatePopupDynamicContentV2();
         updatePopupHistoryV2();
+        updatePopupFireIcon();
     }
 
     function openSettings() {
@@ -1575,15 +2203,54 @@
         }
         if (state.popup.settingsCarryOverTitleNode) {
             state.popup.settingsCarryOverTitleNode.textContent = getCarryOverTimerLabel();
+            state.popup.settingsCarryOverTitleNode.title = getCarryOverTimerDisabledTooltip();
         }
         if (state.popup.settingsCarryOverHintNode) {
             state.popup.settingsCarryOverHintNode.textContent = getCarryOverTimerHint();
+            state.popup.settingsCarryOverHintNode.title = getCarryOverTimerDisabledTooltip();
         }
         if (state.popup.settingsCarryOverInputNode) {
-            state.popup.settingsCarryOverInputNode.checked = state.carryOverTimerEnabled;
+            state.popup.settingsCarryOverInputNode.checked = false;
+            state.popup.settingsCarryOverInputNode.title = getCarryOverTimerDisabledTooltip();
+        }
+        if (state.popup.settingsStreakProgressionTitleNode) {
+            state.popup.settingsStreakProgressionTitleNode.textContent = t("streakProgressionLabel");
+        }
+        if (state.popup.settingsStreakProgressionHintNode) {
+            state.popup.settingsStreakProgressionHintNode.textContent = t("streakProgressionHint");
+        }
+        if (state.popup.settingsStreakProgressionInputNode) {
+            state.popup.settingsStreakProgressionInputNode.checked = state.longStreakProgressionEnabled;
+        }
+        if (state.popup.settingsStreakProgressionPreviewNode) {
+            state.popup.settingsStreakProgressionPreviewNode.textContent = `${t("streakProgressionTiersLabel")}: ${getStreakTierPreviewText()}`;
         }
         if (state.popup.retentionSuffixNode) {
             state.popup.retentionSuffixNode.textContent = getMonthsPlural(state.historyRetentionMonths);
+        }
+        if (state.popup.exportTitleNode) {
+            state.popup.exportTitleNode.textContent = t("exportTitle");
+        }
+        if (state.popup.exportCsvBtnNode) {
+            state.popup.exportCsvBtnNode.textContent = t("exportCsv");
+        }
+        if (state.popup.exportJsonBtnNode) {
+            state.popup.exportJsonBtnNode.textContent = t("exportJson");
+        }
+        if (state.popup.resetDataTitleNode) {
+            state.popup.resetDataTitleNode.textContent = t("resetDataTitle");
+        }
+        if (state.popup.resetDataHintNode) {
+            state.popup.resetDataHintNode.textContent = t("resetDataHint");
+        }
+        if (state.popup.resetTodayBtnNode) {
+            state.popup.resetTodayBtnNode.textContent = t("resetToday");
+        }
+        if (state.popup.clearHistoryBtnNode) {
+            state.popup.clearHistoryBtnNode.textContent = t("clearHistory");
+        }
+        if (state.popup.fullWipeBtnNode) {
+            state.popup.fullWipeBtnNode.textContent = t("fullWipe");
         }
         if (state.popup.settingsGearNode) {
             state.popup.settingsGearNode.title = t("settingsTitle");
@@ -1634,14 +2301,16 @@
             return;
         }
 
-        const historySignature = `${state.language}|${createHistorySignature(dailySummaryRows)}`;
+        const historySignature = `${state.language}|${createHistorySignature(dailySummaryRows)}|${state.popup.historyExpanded ? "1" : "0"}`;
         if (historySignature === state.popup.lastHistorySignature) {
             return;
         }
 
+        updateHistoryToggle(dailySummaryRows);
+
         renderRows(
             state.popup.historyListNode,
-            dailySummaryRows.map(([date, entry]) => ({
+            getDisplayedHistoryRows(dailySummaryRows).map(([date, entry]) => ({
                 key: date,
                 label: date === state.day.date ? `${date} (${t("todayLabel")})` : date,
                 duration: formatDuration(entry.totalSeconds),
@@ -1726,6 +2395,8 @@
         state.popup.todaySessionsExpanded = false;
         state.popup.historyTitleNode = null;
         state.popup.historyListNode = null;
+        state.popup.historyToggleNode = null;
+        state.popup.historyExpanded = false;
         state.popup.lastHistorySignature = "";
         state.popup.lastHeight = 0;
         state.popup.lastLanguage = null;
@@ -1741,6 +2412,20 @@
         state.popup.settingsCarryOverTitleNode = null;
         state.popup.settingsCarryOverHintNode = null;
         state.popup.settingsCarryOverInputNode = null;
+        state.popup.settingsStreakProgressionTitleNode = null;
+        state.popup.settingsStreakProgressionHintNode = null;
+        state.popup.settingsStreakProgressionInputNode = null;
+        state.popup.settingsStreakProgressionPreviewNode = null;
+        state.popup.exportTitleNode = null;
+        state.popup.exportCsvBtnNode = null;
+        state.popup.exportJsonBtnNode = null;
+        state.popup.resetDataTitleNode = null;
+        state.popup.resetDataHintNode = null;
+        state.popup.resetTodayBtnNode = null;
+        state.popup.clearHistoryBtnNode = null;
+        state.popup.fullWipeBtnNode = null;
+        state.popup.popupFireNode = null;
+        state.popup.popupStreakCountNode = null;
 
         state.popup.removeTimeoutId = setTimeout(() => {
             state.popup.removeTimeoutId = null;
@@ -1891,10 +2576,25 @@
         state.runtime.injectObserver = observer;
     }
 
+    function checkTrackChange() {
+        try {
+            const uri = Spicetify.Player.data?.item?.uri || null;
+            if (uri && state.runtime._lastTrackUri && uri !== state.runtime._lastTrackUri) {
+                saveTodayData();
+                if (!state.runtime._streakTestMode) {
+                    computeStreak();
+                    updatePopupFireIcon();
+                }
+            }
+            state.runtime._lastTrackUri = uri;
+        } catch (_) {}
+    }
+
     function updateTrackingState(now) {
         state.lastTickAt = now;
 
         rolloverDayIfNeeded();
+        checkTrackChange();
 
         if (Spicetify.Player.isPlaying()) {
             setWidgetPausedState(false);
@@ -1946,6 +2646,10 @@
                 : totalSeconds
         );
         setWidgetPausedState(shouldWidgetBePaused(), true);
+        if (!state.runtime._streakTestMode) {
+            computeStreak();
+            updatePopupFireIcon();
+        }
 
         if (state.popup.node) {
             const dailySummaryRows = getDailySummaryRows(totalSeconds);
@@ -2032,6 +2736,8 @@
         state.popup.todaySessionsExpanded = false;
         state.popup.historyTitleNode = null;
         state.popup.historyListNode = null;
+        state.popup.historyToggleNode = null;
+        state.popup.historyExpanded = false;
         state.popup.lastHistorySignature = "";
         state.popup.lastHeight = 0;
         state.popup.lastLanguage = null;
@@ -2046,6 +2752,20 @@
         state.popup.settingsCarryOverTitleNode = null;
         state.popup.settingsCarryOverHintNode = null;
         state.popup.settingsCarryOverInputNode = null;
+        state.popup.settingsStreakProgressionTitleNode = null;
+        state.popup.settingsStreakProgressionHintNode = null;
+        state.popup.settingsStreakProgressionInputNode = null;
+        state.popup.settingsStreakProgressionPreviewNode = null;
+        state.popup.exportTitleNode = null;
+        state.popup.exportCsvBtnNode = null;
+        state.popup.exportJsonBtnNode = null;
+        state.popup.resetDataTitleNode = null;
+        state.popup.resetDataHintNode = null;
+        state.popup.resetTodayBtnNode = null;
+        state.popup.clearHistoryBtnNode = null;
+        state.popup.fullWipeBtnNode = null;
+        state.popup.popupFireNode = null;
+        state.popup.popupStreakCountNode = null;
         if (state.ui.resizeHandler) {
             window.removeEventListener("resize", state.ui.resizeHandler);
             state.ui.resizeHandler = null;
@@ -2063,3 +2783,5 @@
         document.getElementById("dtt-styles")?.remove();
     }
 })();
+
+console.log("[DailyTimeTracker] Ready.");
