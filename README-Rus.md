@@ -8,7 +8,7 @@ Want to read in English? Click [here](./README.md).
 > Этот код был написан с помощью ChatGPT.
 
 <p align="center">
-  <img src="./preview.png" alt="Превью>
+  <img src="./preview.png" alt="Превью">
 </p>
 
 ## Возможности
