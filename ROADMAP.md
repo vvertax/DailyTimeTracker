@@ -20,17 +20,31 @@
 - Minimum threshold to count a day: **5 min** of listening.
 - Streak data persisted in LocalStorage.
 
-Color tiers by streak length:
+Color tiers by streak length (default / short progression):
 
 | Days | Color | Hex |
 |------|-------|-----|
-| 2+ | 🟠 Orange | `#FF6B1A` |
-| 30+ | 🔴 Red | `#EF4444` |
-| 90+ | 🩷 Pink | `#EC4899` |
-| 100+ | 🟣 Purple | `#9333EA` |
+| 2+ | 🟠 Orange | `#FF6B1A` |  
+| 14+ | 🔴 Red | `#EF4444` |
+| 30+ | 🩷 Pink | `#EC4899` |
+| 60+ | 🟪 Fuchsia | `#D946EF` |
+| 100+ | 🟣 Purple | `#A855F7` |
 | 150+ | 🔵 Blue | `#3B82F6` |
 | 200+ | 🩵 Turquoise | `#40E0D0` |
-| 250+ | ⚪ White | `#FFFFFF` |
+| 250+ | ⚪ White (MAX) | `#FFFFFF` |
+
+Optional long progression mode (Settings toggle):
+
+| Days | Color | Hex |
+|------|-------|-----|
+| 7+ | 🟧 Amber | `#FF9F1C` |
+| 60+ | 🟪 Fuchsia | `#D946EF` |
+| 225+ | ❄️ Ice | `#9DECF9` |
+| 250+ | 🧊 Crystal Cyan | `#67E8F9` |
+| 275+ | 🟢 Aurora Green | `#34D399` |
+| 300+ | 🟢 Neon Mint | `#6EE7B7` |
+| 380+ | ⚪ Silver | `#C0C0C0` |
+| 500+ | 🤍 White (MAX) | `#FFFFFF` |
 
 ### ✅ Export to CSV / JSON
 > Shipped in [v1.3.0-PreRelease](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0-PreRelease)
@@ -41,7 +55,9 @@ One-click download of your listening data from the Settings panel.
 - **JSON** — full dump including per-day intervals — for developers or backup.
 - Export scope: all retained history + today.
 
-### 🗑️ Clear / Reset Data
+### ✅ Clear / Reset Data
+> Shipped in [v1.3.0-PreRelease](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0-PreRelease)
+
 A destructive action behind a confirmation dialog in Settings.
 
 - **Reset today** — wipe current day, keep history.
@@ -60,12 +76,26 @@ A new toggle in the popup: **Today** / **Week**.
 - Most active day of the week.
 - Mini bar-chart or inline sparkline showing each day's total.
 
+### 📈 Week-over-Week Comparison
+Quick comparison block: **This week** vs **Last week**.
+
+- Total delta in time (hours/minutes).
+- Percent change with up/down indicator.
+- Optional short hint like "You are ahead of last week".
+
 ###  Weekday Breakdown
 Aggregate stats by day of the week across the entire retained history.
 
 - Average per weekday (Mon–Sun).
 - Weekday vs. weekend comparison.
 - Highlighted "most active weekday."
+
+### 🧭 Listening Pace Indicator
+Shows whether your current month is above or below your usual pace.
+
+- Current month average per day.
+- Baseline average from retained history.
+- "On pace" label for quick reading in compact UI.
 
 ---
 
@@ -82,16 +112,10 @@ A 24-column heatmap (0:00–23:00) showing peak listening hours.
 Restore or merge previously exported data.
 
 - Drag-and-drop or file picker in Settings.
+- Import modes: **Merge** (safe) or **Replace** (full overwrite).
 - Merge strategy: combine intervals, take the higher total for overlapping days.
 - Validation: reject malformed or suspiciously large payloads.
-
-### 🔔 Goal Notifications
-Lightweight in-app alerts (not OS-level).
-
-- "Daily goal reached 🎉" — toast when the target is hit.
-- "X-hour marathon" — optional nudge after prolonged listening.
-- "New streak record!" — celebrate when the best streak is beaten.
-- All notifications can be toggled individually in Settings.
+- Preview step before apply (days affected, conflicts, totals).
 
 ### 🎛️ Compact / Full Popup Modes
 Two popup layouts to keep the UI clean as features grow.
@@ -106,6 +130,17 @@ Two popup layouts to keep the UI clean as features grow.
 - Weekly summary + streaks.
 - Full history list.
 - Settings access.
+
+---
+
+## Optional / Niche Features
+
+### 🌍 Timezone-Aware Day Boundary
+Manual timezone setting for users who travel or use non-local day boundaries.
+
+- Day rollover and streak logic tied to selected timezone.
+- Presets + custom UTC offset.
+- Safe migration path so existing history is not lost.
 
 ---
 
