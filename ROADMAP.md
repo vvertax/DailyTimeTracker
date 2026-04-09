@@ -10,7 +10,7 @@
 ## Phase 1 — Core Utilities
 
 ### ✅ Streak (Fire Icon)
-> Shipped in [v1.3.0-PreRelease](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0-PreRelease)
+> Shipped in [v1.3.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0)
 
 - **Fire icon** in the popup header with a color-coded streak counter.
 - **Streak visible** from 2+ consecutive days.
@@ -47,7 +47,7 @@ Optional long progression mode (Settings toggle):
 | 500+ | 🤍 White (MAX) | `#FFFFFF` |
 
 ### ✅ Export to CSV / JSON
-> Shipped in [v1.3.0-PreRelease](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0-PreRelease)
+> Shipped in [v1.3.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0)
 
 One-click download of your listening data from the Settings panel.
 
@@ -56,7 +56,7 @@ One-click download of your listening data from the Settings panel.
 - Export scope: all retained history + today.
 
 ### ✅ Clear / Reset Data
-> Shipped in [v1.3.0-PreRelease](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0-PreRelease)
+> Shipped in [v1.3.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0)
 
 A destructive action behind a confirmation dialog in Settings.
 
