@@ -10,7 +10,7 @@ Want to read in English? Click [`here`](./ROADMAP.md).
 ## Фаза 1 — Базовые утилиты
 
 ### ✅ Серия (Огонёк)
-> Выпущено в [v1.3.0-PreRelease](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0-PreRelease)
+> Выпущено в [v1.3.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0)
 
 - **Иконка огня** в шапке popup-а с цветным счётчиком серии.
 - **Серия видна** начиная с 2+ последовательных дней.
@@ -47,7 +47,7 @@ Want to read in English? Click [`here`](./ROADMAP.md).
 | 500+ | 🤍 Белый (MAX) | `#FFFFFF` |
 
 ### ✅ Экспорт в CSV / JSON
-> Выпущено в [v1.3.0-PreRelease](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0-PreRelease)
+> Выпущено в [v1.3.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0)
 
 Скачивание данных одним кликом из панели настроек.
 
@@ -56,7 +56,7 @@ Want to read in English? Click [`here`](./ROADMAP.md).
 - Область экспорта: вся сохранённая история + сегодня.
 
 ### ✅ Очистка / Сброс данных
-> Выпущено в [v1.3.0-PreRelease](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0-PreRelease)
+> Выпущено в [v1.3.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.3.0)
 
 Деструктивное действие за диалогом подтверждения в настройках.
 
