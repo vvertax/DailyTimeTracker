@@ -26,6 +26,9 @@
         longStreakProgressionKey: "dtt_long_streak_progression_enabled_v1",
         widgetCarryoverKey: "dtt_widget_carryover_v1",
         streakKey: "dtt_streak_v1",
+        versionKey: "dtt_version_v1",
+        versionCheckUrl: "https://vvertax.site/dtt/ext/version.json",
+        versionCheckIntervalMs: 300000,
         streakThresholdSeconds: 300,
         historyRetentionMonths: 1,
         maxHistoryRetentionMonths: 6,
@@ -49,6 +52,8 @@
             ".main-globalNav-searchSection .main-globalNav-searchContainer"
         ]
     };
+
+    const VERSION = "1.5.0";
 
     let historyCache = null;
 
@@ -125,6 +130,7 @@
             intervalId: null,
             injectObserver: null,
             injectRetryTimeoutId: null,
+            updateCheckIntervalId: null,
             _streakTestMode: false,
             _lastTrackUri: null
         }
@@ -164,7 +170,13 @@
             fullWipe: "Полный сброс",
             confirmResetToday: "Сбросить данные за сегодня? История останется нетронутой.",
             confirmClearHistory: "Очистить всю архивную историю? Данные за сегодня останутся.",
-            confirmFullWipe: "Полностью удалить все данные Daily Time Tracker и сбросить настройки?"
+            confirmFullWipe: "Полностью удалить все данные Daily Time Tracker и сбросить настройки?",
+            updateBadge: "ОБНОВЛЕНИЕ",
+            updateTitle: "Доступно обновление Daily Time Tracker",
+            updateSubtitle: "Перезагрузите Spotify для применения обновления.",
+            updateVersionLabel: "ВЕРСИЯ",
+            updateBtnRestart: "Перезапустить",
+            updateBtnReleaseNotes: "Что нового"
         },
         en: {
             widgetTitle: "Click to pin statistics",
@@ -197,7 +209,13 @@
             fullWipe: "Full wipe",
             confirmResetToday: "Reset today's data? History will be kept.",
             confirmClearHistory: "Clear all archived history? Today's data will be kept.",
-            confirmFullWipe: "Delete all Daily Time Tracker data and reset settings?"
+            confirmFullWipe: "Delete all Daily Time Tracker data and reset settings?",
+            updateBadge: "UPDATE",
+            updateTitle: "Daily Time Tracker update available",
+            updateSubtitle: "Restart Spotify to apply the update.",
+            updateVersionLabel: "VERSION",
+            updateBtnRestart: "Restart",
+            updateBtnReleaseNotes: "Release Notes"
         }
     };
 
@@ -245,6 +263,9 @@
 
     computeStreak();
     fetchBadge();
+    syncStoredVersionWithCurrentScript();
+    checkForUpdates();
+    state.runtime.updateCheckIntervalId = setInterval(checkForUpdates, CONFIG.versionCheckIntervalMs);
 
     // ── TEMP: test streak colors ──
     window.dttSetStreak = function (n) {
@@ -609,6 +630,143 @@
                 state.badge = badge;
             }
         } catch (_) {}
+    }
+
+    // ── Update check ─────────────────────────────────────
+
+    function loadStoredVersion() {
+        return Spicetify.LocalStorage.get(CONFIG.versionKey) || "";
+    }
+
+    function saveStoredVersion(v) {
+        Spicetify.LocalStorage.set(CONFIG.versionKey, v);
+    }
+
+    function syncStoredVersionWithCurrentScript() {
+        if (loadStoredVersion() !== VERSION) {
+            saveStoredVersion(VERSION);
+        }
+    }
+
+    function compareVersions(a, b) {
+        const pa = String(a || "").split(".").map(Number);
+        const pb = String(b || "").split(".").map(Number);
+        const len = Math.max(pa.length, pb.length);
+        for (let i = 0; i < len; i++) {
+            const na = pa[i] || 0;
+            const nb = pb[i] || 0;
+            if (na > nb) return 1;
+            if (na < nb) return -1;
+        }
+        return 0;
+    }
+
+    async function fetchLatestVersion() {
+        try {
+            const res = await fetch(CONFIG.versionCheckUrl + "?" + Date.now());
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (data && typeof data.version === "string") return data;
+            return null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async function checkForUpdates() {
+        const data = await fetchLatestVersion();
+        if (!data) return;
+        if (compareVersions(data.version, VERSION) <= 0) {
+            syncStoredVersionWithCurrentScript();
+            return;
+        }
+        if (document.getElementById("dtt-update-overlay")) return;
+        showUpdateModal(data.version);
+    }
+
+    function showUpdateModal(latestVersion) {
+        hideUpdateModal();
+        const changelogUrl = `https://github.com/vvertax/DailyTimeTracker/releases/tag/v${latestVersion}`;
+
+        const overlay = document.createElement("div");
+        overlay.id = "dtt-update-overlay";
+
+        const modal = document.createElement("div");
+        modal.className = "dtt-update-modal";
+
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "dtt-update-close";
+        closeBtn.innerHTML = "&#x2715;";
+        closeBtn.title = "Close";
+        closeBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            hideUpdateModal();
+        });
+
+        const badge = document.createElement("span");
+        badge.className = "dtt-update-badge";
+        badge.textContent = t("updateBadge");
+
+        const title = document.createElement("div");
+        title.className = "dtt-update-title";
+        title.textContent = t("updateTitle");
+
+        const subtitle = document.createElement("div");
+        subtitle.className = "dtt-update-subtitle";
+        subtitle.textContent = t("updateSubtitle");
+
+        const versionBlock = document.createElement("div");
+        versionBlock.className = "dtt-update-version-block";
+
+        const versionLabel = document.createElement("span");
+        versionLabel.className = "dtt-update-version-label";
+        versionLabel.textContent = t("updateVersionLabel");
+
+        const versionValue = document.createElement("span");
+        versionValue.className = "dtt-update-version-value";
+        versionValue.textContent = `${VERSION}  →  ${latestVersion}`;
+
+        versionBlock.appendChild(versionLabel);
+        versionBlock.appendChild(versionValue);
+
+        const buttons = document.createElement("div");
+        buttons.className = "dtt-update-buttons";
+
+        const restartBtn = document.createElement("button");
+        restartBtn.className = "dtt-update-btn dtt-update-btn-primary";
+        restartBtn.textContent = t("updateBtnRestart");
+        restartBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            window.location.reload();
+        });
+        buttons.appendChild(restartBtn);
+
+        const changelogBtn = document.createElement("button");
+        changelogBtn.className = "dtt-update-btn dtt-update-btn-secondary";
+        changelogBtn.textContent = t("updateBtnReleaseNotes");
+        changelogBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            window.open(changelogUrl, "_blank");
+        });
+        buttons.appendChild(changelogBtn);
+
+        modal.appendChild(closeBtn);
+        modal.appendChild(badge);
+        modal.appendChild(title);
+        modal.appendChild(subtitle);
+        modal.appendChild(versionBlock);
+        modal.appendChild(buttons);
+
+        overlay.appendChild(modal);
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) hideUpdateModal();
+        });
+
+        document.body.appendChild(overlay);
+    }
+
+    function hideUpdateModal() {
+        document.getElementById("dtt-update-overlay")?.remove();
     }
 
     function getActiveStreakTiers() {
@@ -1544,6 +1702,146 @@
 
             .dtt-badge-pill[hidden] {
                 display: none;
+            }
+
+            /* ── Update modal ────────────────────────────── */
+            #dtt-update-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 10000;
+                background: rgba(0, 0, 0, 0.65);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                backdrop-filter: blur(4px);
+            }
+
+            .dtt-update-modal {
+                position: relative;
+                background: #1a1a1a;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 16px;
+                padding: 32px 36px;
+                max-width: 400px;
+                width: calc(100vw - 48px);
+                text-align: center;
+                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+                font-family: "Spotify Mix", "SpotifyMixUI", var(--font-family, sans-serif);
+            }
+
+            .dtt-update-close {
+                position: absolute;
+                top: 14px;
+                right: 14px;
+                background: none;
+                border: none;
+                color: rgba(255, 255, 255, 0.5);
+                font-size: 18px;
+                cursor: pointer;
+                padding: 4px 8px;
+                line-height: 1;
+                border-radius: 4px;
+                transition: color 0.15s ease, background 0.15s ease;
+            }
+
+            .dtt-update-close:hover {
+                color: #fff;
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            .dtt-update-badge {
+                display: inline-block;
+                padding: 4px 14px;
+                border-radius: 999px;
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                color: #1ed760;
+                border: 1px solid rgba(30, 215, 96, 0.4);
+                background: rgba(30, 215, 96, 0.1);
+                margin-bottom: 16px;
+            }
+
+            .dtt-update-title {
+                font-size: 17px;
+                font-weight: 700;
+                color: #fff;
+                margin-bottom: 8px;
+                line-height: 1.3;
+            }
+
+            .dtt-update-subtitle {
+                font-size: 13px;
+                color: rgba(255, 255, 255, 0.55);
+                margin-bottom: 20px;
+                line-height: 1.5;
+            }
+
+            .dtt-update-version-block {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 6px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 10px;
+                padding: 14px 20px;
+                margin-bottom: 22px;
+            }
+
+            .dtt-update-version-label {
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: rgba(255, 255, 255, 0.4);
+            }
+
+            .dtt-update-version-value {
+                font-size: 18px;
+                font-weight: 700;
+                color: #fff;
+                letter-spacing: 0.03em;
+            }
+
+            .dtt-update-buttons {
+                display: flex;
+                gap: 10px;
+            }
+
+            .dtt-update-btn {
+                flex: 1;
+                padding: 12px 16px;
+                border-radius: 999px;
+                font-size: 14px;
+                font-weight: 700;
+                cursor: pointer;
+                border: none;
+                transition: transform 0.12s ease, opacity 0.15s ease;
+                font-family: inherit;
+            }
+
+            .dtt-update-btn:hover {
+                transform: scale(1.03);
+            }
+
+            .dtt-update-btn:active {
+                transform: scale(0.97);
+            }
+
+            .dtt-update-btn-primary {
+                background: #fff;
+                color: #000;
+            }
+
+            .dtt-update-btn-secondary {
+                background: rgba(255, 255, 255, 0.08);
+                color: #fff;
+            }
+
+            .dtt-update-btn-secondary:hover {
+                background: rgba(255, 255, 255, 0.14);
             }
         `;
         document.head.appendChild(style);
@@ -2763,6 +3061,11 @@
             clearInterval(state.runtime.intervalId);
             state.runtime.intervalId = null;
         }
+        if (state.runtime.updateCheckIntervalId !== null) {
+            clearInterval(state.runtime.updateCheckIntervalId);
+            state.runtime.updateCheckIntervalId = null;
+        }
+        hideUpdateModal();
         state.runtime.injectObserver?.disconnect?.();
         state.runtime.injectObserver = null;
         if (state.runtime.injectRetryTimeoutId !== null) {
