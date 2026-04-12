@@ -3,5 +3,5 @@
         setTimeout(DailyTimeTracker, 500);
         return;
     }
-    import("https://vvertax.site/dtt/ext/main.mjs?v" + Date.now()).catch(() => {});
+    import("https://vvertax.site/dtt/ext/main.mjs?v=" + Date.now()).catch(() => {});
 })();
