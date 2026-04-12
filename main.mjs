@@ -58,7 +58,7 @@
         ]
     };
 
-    const VERSION = "1.6.1";
+    const VERSION = "1.6.2";
 
     let historyCache = null;
 
@@ -119,6 +119,9 @@
             importMergeBtnNode: null,
             importReplaceBtnNode: null,
             importFileInputNode: null,
+            updateCheckTitleNode: null,
+            updateCheckHintNode: null,
+            updateCheckBtnNode: null,
             resetDataTitleNode: null,
             resetDataHintNode: null,
             resetTodayBtnNode: null,
@@ -192,6 +195,11 @@
             importPreviewResultTotal: "Итог после импорта",
             importSuccessMerge: "Импорт завершен: данные объединены.",
             importSuccessReplace: "Импорт завершен: данные заменены.",
+            updateCheckTitle: "Проверка обновлений",
+            updateCheckHint: "Проверить наличие новой версии вручную.",
+            updateCheckButton: "Проверить",
+            updateCheckCurrent: "У вас уже последняя версия.",
+            updateCheckFailed: "Не удалось проверить обновления прямо сейчас.",
             resetDataTitle: "Очистка / Сброс данных",
             resetDataHint: "Действия необратимы. Перед полным сбросом лучше экспортировать данные.",
             resetToday: "Сбросить сегодня",
@@ -252,6 +260,11 @@
             importPreviewResultTotal: "Total after import",
             importSuccessMerge: "Import complete: data was merged.",
             importSuccessReplace: "Import complete: data was replaced.",
+            updateCheckTitle: "Update check",
+            updateCheckHint: "Check for a new version manually.",
+            updateCheckButton: "Check now",
+            updateCheckCurrent: "You are already using the latest version.",
+            updateCheckFailed: "Unable to check for updates right now.",
             resetDataTitle: "Clear / Reset Data",
             resetDataHint: "These actions are irreversible. Export your data before a full wipe.",
             resetToday: "Reset today",
@@ -738,17 +751,27 @@
         }
     }
 
-    async function checkForUpdates() {
+    async function checkForUpdates(options = {}) {
+        const manual = Boolean(options.manual);
         const data = await fetchLatestVersion();
-        if (!data) return;
+        if (!data) {
+            if (manual) {
+                window.alert(t("updateCheckFailed"));
+            }
+            return false;
+        }
         if (compareVersions(data.version, VERSION) <= 0) {
             syncStoredVersionWithCurrentScript();
             console.log(`[DailyTimeTracker] No updates available. Current version: ${VERSION}.`);
-            return;
+            if (manual) {
+                window.alert(t("updateCheckCurrent"));
+            }
+            return false;
         }
         console.log(`[DailyTimeTracker] Update found! Latest version: ${data.version}. Current version: ${VERSION}.`);
         if (document.getElementById("dtt-update-overlay")) return;
         showUpdateModal(data.version);
+        return true;
     }
 
     function showUpdateModal(latestVersion) {
@@ -1952,6 +1975,9 @@
                 display: none;
                 flex-direction: column;
                 gap: 0;
+                min-height: 0;
+                overflow-y: auto;
+                overscroll-behavior: contain;
                 animation: dtt-settings-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
             }
 
@@ -2022,6 +2048,15 @@
                 gap: 8px;
             }
 
+            .dtt-settings-actions.is-soft {
+                gap: 10px;
+            }
+
+            .dtt-settings-action-button {
+                min-width: 92px;
+                justify-content: center;
+            }
+
             .dtt-settings-danger-button {
                 border: 1px solid rgba(239, 68, 68, 0.25);
                 border-radius: 999px;
@@ -2055,45 +2090,61 @@
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                padding: 2px 8px;
+                min-height: 22px;
+                padding: 2px 9px;
                 border-radius: 999px;
                 font-size: 10px;
                 font-weight: 800;
-                letter-spacing: 0.08em;
+                letter-spacing: 0.05em;
                 text-transform: uppercase;
                 border: 1px solid transparent;
-                line-height: 1.4;
+                line-height: 1;
                 flex-shrink: 0;
                 position: relative;
                 overflow: hidden;
+                white-space: nowrap;
+                isolation: isolate;
             }
 
             .dtt-badge-pill.is-rainbow {
                 color: #fff !important;
-                border-color: rgba(255, 255, 255, 0.28) !important;
+                border-color: rgba(255, 255, 255, 0.22) !important;
+                background: rgba(255, 255, 255, 0.04);
+                box-shadow:
+                    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+                    0 0 12px rgba(255, 255, 255, 0.06);
+                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+            }
+
+            .dtt-badge-pill.is-rainbow::before {
+                content: "";
+                position: absolute;
+                inset: -50% 0;
+                z-index: -1;
                 background:
                     linear-gradient(
                         180deg,
                         #ff004d 0%,
-                        #ff7a00 16%,
-                        #ffd400 32%,
-                        #38d66b 48%,
-                        #00c2ff 64%,
-                        #4f46e5 82%,
-                        #c026d3 100%
-                    ) 0 0 / 100% 240%;
-                box-shadow:
-                    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-                    0 0 14px rgba(255, 255, 255, 0.08);
-                animation: dtt-rainbow-badge-flow 3.2s linear infinite;
+                        #ff7a00 14.285%,
+                        #ffd400 28.57%,
+                        #38d66b 42.855%,
+                        #00c2ff 57.14%,
+                        #4f46e5 71.425%,
+                        #c026d3 85.71%,
+                        #ff004d 100%
+                    );
+                background-size: 100% 50%;
+                background-repeat: repeat-y;
+                animation: dtt-rainbow-badge-flow 3.6s linear infinite;
+                will-change: transform;
             }
 
             @keyframes dtt-rainbow-badge-flow {
-                0% {
-                    background-position: 0 0%;
+                from {
+                    transform: translateY(0);
                 }
-                100% {
-                    background-position: 0 100%;
+                to {
+                    transform: translateY(-50%);
                 }
             }
 
@@ -2644,41 +2695,6 @@
         retRow.append(retTitle, retContent);
         settingsPanel.appendChild(retRow);
 
-        const carryOverRow = document.createElement("div");
-        carryOverRow.className = "dtt-settings-row";
-        const carryOverTitle = document.createElement("div");
-        carryOverTitle.className = "dtt-settings-row-label";
-        carryOverTitle.textContent = getCarryOverTimerLabel();
-        const carryOverContent = document.createElement("div");
-        carryOverContent.className = "dtt-settings-row-content is-between";
-        carryOverContent.title = getCarryOverTimerDisabledTooltip();
-        const carryOverHint = document.createElement("div");
-        carryOverHint.className = "dtt-settings-row-hint";
-        carryOverHint.textContent = getCarryOverTimerHint();
-        carryOverHint.title = getCarryOverTimerDisabledTooltip();
-        const carryOverInput = document.createElement("input");
-        carryOverInput.type = "checkbox";
-        carryOverInput.className = "dtt-settings-checkbox";
-        carryOverInput.checked = false;
-        carryOverInput.title = getCarryOverTimerDisabledTooltip();
-        carryOverInput.setAttribute("aria-disabled", "true");
-        carryOverInput.style.opacity = "0.55";
-        carryOverInput.style.cursor = "not-allowed";
-        carryOverInput.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            carryOverInput.checked = false;
-        });
-        carryOverInput.addEventListener("change", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            event.target.checked = false;
-        });
-
-        carryOverContent.append(carryOverHint, carryOverInput);
-        carryOverRow.append(carryOverTitle, carryOverContent);
-        settingsPanel.appendChild(carryOverRow);
-
         const streakProgressionRow = document.createElement("div");
         streakProgressionRow.className = "dtt-settings-row";
         const streakProgressionTitle = document.createElement("div");
@@ -2709,6 +2725,31 @@
 
         streakProgressionRow.append(streakProgressionTitle, streakProgressionContent, streakProgressionPreview);
         settingsPanel.appendChild(streakProgressionRow);
+
+        const updateRow = document.createElement("div");
+        updateRow.className = "dtt-settings-row";
+        const updateTitle = document.createElement("div");
+        updateTitle.className = "dtt-settings-row-label";
+        updateTitle.textContent = t("updateCheckTitle");
+        const updateHint = document.createElement("div");
+        updateHint.className = "dtt-settings-row-hint";
+        updateHint.textContent = t("updateCheckHint");
+        const updateActions = document.createElement("div");
+        updateActions.className = "dtt-settings-actions is-soft";
+
+        const updateCheckBtn = document.createElement("button");
+        updateCheckBtn.type = "button";
+        updateCheckBtn.className = "dtt-language-button dtt-settings-action-button";
+        updateCheckBtn.textContent = t("updateCheckButton");
+        updateCheckBtn.addEventListener("click", async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            await checkForUpdates({ manual: true });
+        });
+
+        updateActions.append(updateCheckBtn);
+        updateRow.append(updateTitle, updateHint, updateActions);
+        settingsPanel.appendChild(updateRow);
 
         // Export row
         const exportRow = document.createElement("div");
@@ -2792,6 +2833,41 @@
         importRow.append(importTitle, importHint, importActions, importFileInput);
         settingsPanel.appendChild(importRow);
 
+        const carryOverRow = document.createElement("div");
+        carryOverRow.className = "dtt-settings-row";
+        const carryOverTitle = document.createElement("div");
+        carryOverTitle.className = "dtt-settings-row-label";
+        carryOverTitle.textContent = getCarryOverTimerLabel();
+        const carryOverContent = document.createElement("div");
+        carryOverContent.className = "dtt-settings-row-content is-between";
+        carryOverContent.title = getCarryOverTimerDisabledTooltip();
+        const carryOverHint = document.createElement("div");
+        carryOverHint.className = "dtt-settings-row-hint";
+        carryOverHint.textContent = getCarryOverTimerHint();
+        carryOverHint.title = getCarryOverTimerDisabledTooltip();
+        const carryOverInput = document.createElement("input");
+        carryOverInput.type = "checkbox";
+        carryOverInput.className = "dtt-settings-checkbox";
+        carryOverInput.checked = false;
+        carryOverInput.title = getCarryOverTimerDisabledTooltip();
+        carryOverInput.setAttribute("aria-disabled", "true");
+        carryOverInput.style.opacity = "0.55";
+        carryOverInput.style.cursor = "not-allowed";
+        carryOverInput.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            carryOverInput.checked = false;
+        });
+        carryOverInput.addEventListener("change", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            event.target.checked = false;
+        });
+
+        carryOverContent.append(carryOverHint, carryOverInput);
+        carryOverRow.append(carryOverTitle, carryOverContent);
+        settingsPanel.appendChild(carryOverRow);
+
         const resetRow = document.createElement("div");
         resetRow.className = "dtt-settings-row";
         const resetTitle = document.createElement("div");
@@ -2872,6 +2948,9 @@
         state.popup.settingsStreakProgressionHintNode = streakProgressionHint;
         state.popup.settingsStreakProgressionInputNode = streakProgressionInput;
         state.popup.settingsStreakProgressionPreviewNode = streakProgressionPreview;
+        state.popup.updateCheckTitleNode = updateTitle;
+        state.popup.updateCheckHintNode = updateHint;
+        state.popup.updateCheckBtnNode = updateCheckBtn;
         state.popup.exportTitleNode = exportTitle;
         state.popup.exportCsvBtnNode = csvBtn;
         state.popup.exportJsonBtnNode = jsonBtn;
@@ -3024,6 +3103,15 @@
         }
         if (state.popup.settingsStreakProgressionPreviewNode) {
             state.popup.settingsStreakProgressionPreviewNode.textContent = `${t("streakProgressionTiersLabel")}: ${getStreakTierPreviewText()}`;
+        }
+        if (state.popup.updateCheckTitleNode) {
+            state.popup.updateCheckTitleNode.textContent = t("updateCheckTitle");
+        }
+        if (state.popup.updateCheckHintNode) {
+            state.popup.updateCheckHintNode.textContent = t("updateCheckHint");
+        }
+        if (state.popup.updateCheckBtnNode) {
+            state.popup.updateCheckBtnNode.textContent = t("updateCheckButton");
         }
         if (state.popup.retentionSuffixNode) {
             state.popup.retentionSuffixNode.textContent = getMonthsPlural(state.historyRetentionMonths);
@@ -3228,6 +3316,9 @@
         state.popup.settingsStreakProgressionHintNode = null;
         state.popup.settingsStreakProgressionInputNode = null;
         state.popup.settingsStreakProgressionPreviewNode = null;
+        state.popup.updateCheckTitleNode = null;
+        state.popup.updateCheckHintNode = null;
+        state.popup.updateCheckBtnNode = null;
         state.popup.exportTitleNode = null;
         state.popup.exportCsvBtnNode = null;
         state.popup.exportJsonBtnNode = null;
@@ -3583,6 +3674,9 @@
         state.popup.settingsStreakProgressionHintNode = null;
         state.popup.settingsStreakProgressionInputNode = null;
         state.popup.settingsStreakProgressionPreviewNode = null;
+        state.popup.updateCheckTitleNode = null;
+        state.popup.updateCheckHintNode = null;
+        state.popup.updateCheckBtnNode = null;
         state.popup.exportTitleNode = null;
         state.popup.exportCsvBtnNode = null;
         state.popup.exportJsonBtnNode = null;
