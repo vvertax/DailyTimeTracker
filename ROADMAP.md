@@ -90,7 +90,7 @@ Aggregate stats by day of the week across the entire retained history.
 - Weekday vs. weekend comparison.
 - Highlighted "most active weekday."
 
-### 🧭 Listening Pace Indicator
+### 🛑 Listening Pace Indicator (Cancelled)
 Shows whether your current month is above or below your usual pace.
 
 - Current month average per day.
@@ -108,10 +108,12 @@ A 24-column heatmap (0:00–23:00) showing peak listening hours.
 - Scope: last 7 days or full retention period (toggle).
 - Rendered as a compact SVG bar chart inside the popup.
 
-### 📥 Import from JSON
-Restore or merge previously exported data.
+### ✅ Import from JSON
+> Shipped in [v1.6.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v1.6.0)
 
-- Drag-and-drop or file picker in Settings.
+Restore or merge previously exported data from the Settings panel.
+
+- File picker in Settings.
 - Import modes: **Merge** (safe) or **Replace** (full overwrite).
 - Merge strategy: combine intervals, take the higher total for overlapping days.
 - Validation: reject malformed or suspiciously large payloads.
