@@ -29,6 +29,8 @@
         versionKey: "dtt_version_v1",
         versionCheckUrl: "https://vvertax.site/dtt/ext/version.json",
         versionCheckIntervalMs: 300000,
+        badgeApiBaseUrl: "https://vvertax.site/dtt/api/badge.php",
+        apiHealthCheckIntervalMs: 300000,
         streakThresholdSeconds: 300,
         historyRetentionMonths: 1,
         maxHistoryRetentionMonths: 6,
@@ -41,6 +43,9 @@
         popupOffsetPx: 10,
         viewportMarginPx: 16,
         maxPopupWidthPx: 520,
+        maxImportFileBytes: 1024 * 1024,
+        maxImportDays: 3660,
+        maxImportIntervalsPerDay: 1000,
         todaySessionsToggleThreshold: 5,
         collapsedTodaySessionsCount: 1,
         historyToggleThreshold: 5,
@@ -53,7 +58,7 @@
         ]
     };
 
-    const VERSION = "1.5.0";
+    const VERSION = "1.6.1";
 
     let historyCache = null;
 
@@ -109,6 +114,11 @@
             exportTitleNode: null,
             exportCsvBtnNode: null,
             exportJsonBtnNode: null,
+            importTitleNode: null,
+            importHintNode: null,
+            importMergeBtnNode: null,
+            importReplaceBtnNode: null,
+            importFileInputNode: null,
             resetDataTitleNode: null,
             resetDataHintNode: null,
             resetTodayBtnNode: null,
@@ -131,6 +141,7 @@
             injectObserver: null,
             injectRetryTimeoutId: null,
             updateCheckIntervalId: null,
+            apiHealthCheckIntervalId: null,
             _streakTestMode: false,
             _lastTrackUri: null
         }
@@ -163,6 +174,24 @@
             exportTitle: "Экспорт данных",
             exportCsv: "Скачать CSV",
             exportJson: "Скачать JSON",
+            importTitle: "Импорт из JSON",
+            importHint: "Восстановить или объединить данные из ранее экспортированного JSON.",
+            importMerge: "Мердж",
+            importReplace: "Заменить",
+            importReadError: "Не удалось прочитать выбранный JSON-файл.",
+            importInvalid: "Импорт отклонен: ожидается JSON в формате export (дата -> totalSeconds / intervals).",
+            importTooLarge: "Импорт отклонен: файл слишком большой.",
+            importTooManyDays: "Импорт отклонен: слишком много дней в файле.",
+            importTooManyIntervals: "Импорт отклонен: слишком много интервалов в одном дне.",
+            importConfirmMerge: "Импорт JSON с объединением?",
+            importConfirmReplace: "Импорт JSON с полной заменой?",
+            importPreviewDays: "Дней в файле",
+            importPreviewAffected: "Затронуто дней",
+            importPreviewConflicts: "Пересечений",
+            importPreviewImportedTotal: "Время в файле",
+            importPreviewResultTotal: "Итог после импорта",
+            importSuccessMerge: "Импорт завершен: данные объединены.",
+            importSuccessReplace: "Импорт завершен: данные заменены.",
             resetDataTitle: "Очистка / Сброс данных",
             resetDataHint: "Действия необратимы. Перед полным сбросом лучше экспортировать данные.",
             resetToday: "Сбросить сегодня",
@@ -176,7 +205,10 @@
             updateSubtitle: "Перезагрузите Spotify для применения обновления.",
             updateVersionLabel: "ВЕРСИЯ",
             updateBtnRestart: "Перезапустить",
-            updateBtnReleaseNotes: "Что нового"
+            updateBtnReleaseNotes: "Что нового",
+            apiUnavailableBadge: "API",
+            apiUnavailableTitle: "Не удалось подключиться к API Daily Time Tracker",
+            apiUnavailableSubtitle: "Скрипт продолжит работать как раньше. Повторная проверка будет выполнена автоматически."
         },
         en: {
             widgetTitle: "Click to pin statistics",
@@ -202,6 +234,24 @@
             exportTitle: "Export data",
             exportCsv: "Download CSV",
             exportJson: "Download JSON",
+            importTitle: "Import from JSON",
+            importHint: "Restore or merge data from a previous JSON export.",
+            importMerge: "Merge",
+            importReplace: "Replace",
+            importReadError: "Could not read the selected JSON file.",
+            importInvalid: "Import rejected: expected a JSON export object shaped like date -> totalSeconds / intervals.",
+            importTooLarge: "Import rejected: file is too large.",
+            importTooManyDays: "Import rejected: too many days in payload.",
+            importTooManyIntervals: "Import rejected: too many intervals in a single day.",
+            importConfirmMerge: "Import JSON and merge it with current data?",
+            importConfirmReplace: "Import JSON and replace current data?",
+            importPreviewDays: "Days in file",
+            importPreviewAffected: "Affected days",
+            importPreviewConflicts: "Conflicts",
+            importPreviewImportedTotal: "Time in file",
+            importPreviewResultTotal: "Total after import",
+            importSuccessMerge: "Import complete: data was merged.",
+            importSuccessReplace: "Import complete: data was replaced.",
             resetDataTitle: "Clear / Reset Data",
             resetDataHint: "These actions are irreversible. Export your data before a full wipe.",
             resetToday: "Reset today",
@@ -215,7 +265,10 @@
             updateSubtitle: "Restart Spotify to apply the update.",
             updateVersionLabel: "VERSION",
             updateBtnRestart: "Restart",
-            updateBtnReleaseNotes: "Release Notes"
+            updateBtnReleaseNotes: "Release Notes",
+            apiUnavailableBadge: "API",
+            apiUnavailableTitle: "Unable to connect to the Daily Time Tracker API",
+            apiUnavailableSubtitle: "The script will continue working as before. It will retry automatically."
         }
     };
 
@@ -266,6 +319,8 @@
     syncStoredVersionWithCurrentScript();
     checkForUpdates();
     state.runtime.updateCheckIntervalId = setInterval(checkForUpdates, CONFIG.versionCheckIntervalMs);
+    checkApiAvailability();
+    state.runtime.apiHealthCheckIntervalId = setInterval(checkApiAvailability, CONFIG.apiHealthCheckIntervalMs);
 
     // ── TEMP: test streak colors ──
     window.dttSetStreak = function (n) {
@@ -623,13 +678,23 @@
         try {
             const uid = Spicetify.Platform?.username;
             if (!uid) return;
-            const res = await fetch(`https://vvertax.site/dtt/api/badge.php?uid=${encodeURIComponent(uid)}`);
+            const res = await fetch(`${CONFIG.badgeApiBaseUrl}?uid=${encodeURIComponent(uid)}`);
             if (!res.ok) return;
             const badge = await res.json();
             if (badge && typeof badge.label === "string") {
                 state.badge = badge;
             }
         } catch (_) {}
+    }
+
+    async function fetchApiHealthStatus() {
+        try {
+            const uid = Spicetify.Platform?.username || "healthcheck";
+            const res = await fetch(`${CONFIG.badgeApiBaseUrl}?uid=${encodeURIComponent(uid)}&t=${Date.now()}`);
+            return res.ok || res.status === 204;
+        } catch (_) {
+            return false;
+        }
     }
 
     // ── Update check ─────────────────────────────────────
@@ -678,8 +743,10 @@
         if (!data) return;
         if (compareVersions(data.version, VERSION) <= 0) {
             syncStoredVersionWithCurrentScript();
+            console.log(`[DailyTimeTracker] No updates available. Current version: ${VERSION}.`);
             return;
         }
+        console.log(`[DailyTimeTracker] Update found! Latest version: ${data.version}. Current version: ${VERSION}.`);
         if (document.getElementById("dtt-update-overlay")) return;
         showUpdateModal(data.version);
     }
@@ -767,6 +834,80 @@
 
     function hideUpdateModal() {
         document.getElementById("dtt-update-overlay")?.remove();
+    }
+
+    async function checkApiAvailability() {
+        const isAvailable = await fetchApiHealthStatus();
+
+        if (isAvailable) {
+            console.log("[DailyTimeTracker] API connection OK.");
+            hideApiUnavailableModal();
+            return;
+        }
+
+        console.log("[DailyTimeTracker] Unable to connect to API. The script will continue working as before.");
+        showApiUnavailableModal();
+    }
+
+    function showApiUnavailableModal() {
+        if (document.getElementById("dtt-api-unavailable-overlay")) {
+            return;
+        }
+
+        const overlay = document.createElement("div");
+        overlay.id = "dtt-api-unavailable-overlay";
+        overlay.style.cssText = `
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: rgba(0, 0, 0, 0.65);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        `;
+
+        const modal = document.createElement("div");
+        modal.className = "dtt-update-modal";
+
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "dtt-update-close";
+        closeBtn.innerHTML = "&#x2715;";
+        closeBtn.title = "Close";
+        closeBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            hideApiUnavailableModal();
+        });
+
+        const badge = document.createElement("span");
+        badge.className = "dtt-update-badge";
+        badge.textContent = t("apiUnavailableBadge");
+
+        const title = document.createElement("div");
+        title.className = "dtt-update-title";
+        title.textContent = t("apiUnavailableTitle");
+
+        const subtitle = document.createElement("div");
+        subtitle.className = "dtt-update-subtitle";
+        subtitle.textContent = t("apiUnavailableSubtitle");
+
+        modal.appendChild(closeBtn);
+        modal.appendChild(badge);
+        modal.appendChild(title);
+        modal.appendChild(subtitle);
+
+        overlay.appendChild(modal);
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) {
+                hideApiUnavailableModal();
+            }
+        });
+
+        document.body.appendChild(overlay);
+    }
+
+    function hideApiUnavailableModal() {
+        document.getElementById("dtt-api-unavailable-overlay")?.remove();
     }
 
     function getActiveStreakTiers() {
@@ -904,6 +1045,230 @@
             data[date] = entry;
         }
         downloadFile("DailyTimeTracker.json", JSON.stringify(data, null, 2), "application/json");
+    }
+
+    function getAllStoredDays() {
+        const data = {};
+
+        for (const [date, entry] of Object.entries(readHistory())) {
+            const normalized = normalizeHistoryEntry(entry);
+            if (normalized.totalSeconds > 0 || normalized.intervals.length > 0) {
+                data[date] = normalized;
+            }
+        }
+
+        const todaySnapshot = createPersistedDaySnapshot();
+        if (todaySnapshot.totalSeconds > 0 || todaySnapshot.intervals.length > 0) {
+            data[todaySnapshot.date] = normalizeHistoryEntry(todaySnapshot);
+        }
+
+        return data;
+    }
+
+    function dedupeAndSortIntervals(intervals) {
+        const seen = new Set();
+        const unique = [];
+
+        for (const interval of intervals) {
+            const normalized = normalizeInterval(interval);
+            if (!normalized) {
+                continue;
+            }
+
+            const key = `${normalized.start}:${normalized.end}`;
+            if (seen.has(key)) {
+                continue;
+            }
+
+            seen.add(key);
+            unique.push(normalized);
+        }
+
+        unique.sort((a, b) => a.start - b.start || a.end - b.end);
+        return unique;
+    }
+
+    function normalizeImportedDataset(payload) {
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+            throw new Error("invalid-shape");
+        }
+
+        const entries = Object.entries(payload);
+        if (entries.length > CONFIG.maxImportDays) {
+            throw new Error("too-many-days");
+        }
+
+        const normalized = {};
+        for (const [date, entry] of entries) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                throw new Error("invalid-shape");
+            }
+
+            const day = normalizeHistoryEntry(entry);
+            if (day.intervals.length > CONFIG.maxImportIntervalsPerDay) {
+                throw new Error("too-many-intervals");
+            }
+
+            day.intervals = dedupeAndSortIntervals(day.intervals);
+            day.totalSeconds = Math.max(day.totalSeconds, getIntervalsTotalSeconds(day.intervals));
+
+            if (day.totalSeconds <= 0 && day.intervals.length === 0) {
+                continue;
+            }
+
+            normalized[date] = day;
+        }
+
+        return normalized;
+    }
+
+    function mergeDayEntries(currentEntry, importedEntry) {
+        const current = normalizeHistoryEntry(currentEntry);
+        const incoming = normalizeHistoryEntry(importedEntry);
+        const intervals = dedupeAndSortIntervals(current.intervals.concat(incoming.intervals));
+
+        return {
+            totalSeconds: Math.max(
+                current.totalSeconds,
+                incoming.totalSeconds,
+                getIntervalsTotalSeconds(intervals)
+            ),
+            intervals
+        };
+    }
+
+    function getDatasetTotalSeconds(days) {
+        return Object.values(days).reduce((total, entry) => {
+            return total + Math.max(0, Math.floor(Number(entry?.totalSeconds) || 0));
+        }, 0);
+    }
+
+    function buildImportPlan(importedDays, mode) {
+        const currentDays = getAllStoredDays();
+        const resultDays = mode === "replace" ? {} : { ...currentDays };
+        let conflicts = 0;
+
+        if (mode === "replace") {
+            for (const [date, entry] of Object.entries(importedDays)) {
+                resultDays[date] = normalizeHistoryEntry(entry);
+            }
+        } else {
+            for (const [date, entry] of Object.entries(importedDays)) {
+                if (resultDays[date]) {
+                    conflicts++;
+                    resultDays[date] = mergeDayEntries(resultDays[date], entry);
+                } else {
+                    resultDays[date] = normalizeHistoryEntry(entry);
+                }
+            }
+        }
+
+        return {
+            resultDays,
+            affectedDays: mode === "replace" ? Object.keys(resultDays).length : Object.keys(importedDays).length,
+            conflicts,
+            importedTotalSeconds: getDatasetTotalSeconds(importedDays),
+            resultTotalSeconds: getDatasetTotalSeconds(resultDays)
+        };
+    }
+
+    function applyImportedDataset(days) {
+        const today = getTodayString();
+        const nextToday = days[today]
+            ? normalizeDayData({ date: today, ...days[today] }, today)
+            : createEmptyDay(today);
+        const nextHistory = {};
+
+        for (const [date, entry] of Object.entries(days)) {
+            if (date === today) {
+                continue;
+            }
+
+            nextHistory[date] = normalizeHistoryEntry(entry);
+        }
+
+        saveHistory(nextHistory);
+        state.runtime._streakTestMode = false;
+        state.day = nextToday;
+        state.currentSession = null;
+        state.idleStartedAt = null;
+        state.silenceSeconds = 0;
+        resetWidgetCarryover();
+        saveTodayData();
+        computeStreak();
+        updatePopupStaticTextV2();
+        syncVisibleUI();
+        updatePopupHistoryV2(getDailySummaryRows(getComputedDayTotalSeconds()));
+    }
+
+    async function importJsonFile(file, mode) {
+        if (!file) {
+            return;
+        }
+
+        if (file.size > CONFIG.maxImportFileBytes) {
+            window.alert(t("importTooLarge"));
+            return;
+        }
+
+        let payload;
+        try {
+            payload = JSON.parse(await file.text());
+        } catch (_) {
+            window.alert(t("importReadError"));
+            return;
+        }
+
+        let importedDays;
+        try {
+            importedDays = normalizeImportedDataset(payload);
+        } catch (error) {
+            if (error?.message === "too-many-days") {
+                window.alert(t("importTooManyDays"));
+                return;
+            }
+            if (error?.message === "too-many-intervals") {
+                window.alert(t("importTooManyIntervals"));
+                return;
+            }
+            window.alert(t("importInvalid"));
+            return;
+        }
+
+        const importedCount = Object.keys(importedDays).length;
+        if (importedCount === 0) {
+            window.alert(t("importInvalid"));
+            return;
+        }
+
+        const plan = buildImportPlan(importedDays, mode);
+        const previewMessage = [
+            mode === "replace" ? t("importConfirmReplace") : t("importConfirmMerge"),
+            "",
+            `${t("importPreviewDays")}: ${importedCount}`,
+            `${t("importPreviewAffected")}: ${plan.affectedDays}`,
+            `${t("importPreviewConflicts")}: ${plan.conflicts}`,
+            `${t("importPreviewImportedTotal")}: ${formatDuration(plan.importedTotalSeconds)}`,
+            `${t("importPreviewResultTotal")}: ${formatDuration(plan.resultTotalSeconds)}`
+        ].join("\n");
+
+        if (!confirmDestructiveAction(previewMessage)) {
+            return;
+        }
+
+        applyImportedDataset(plan.resultDays);
+        window.alert(mode === "replace" ? t("importSuccessReplace") : t("importSuccessMerge"));
+    }
+
+    function openImportPicker(mode) {
+        const input = state.popup.importFileInputNode;
+        if (!input) {
+            return;
+        }
+
+        input.value = "";
+        input.dataset.importMode = mode;
+        input.click();
     }
 
     function downloadFile(filename, content, mimeType) {
@@ -1689,6 +2054,7 @@
             .dtt-badge-pill {
                 display: inline-flex;
                 align-items: center;
+                justify-content: center;
                 padding: 2px 8px;
                 border-radius: 999px;
                 font-size: 10px;
@@ -1698,6 +2064,37 @@
                 border: 1px solid transparent;
                 line-height: 1.4;
                 flex-shrink: 0;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .dtt-badge-pill.is-rainbow {
+                color: #fff !important;
+                border-color: rgba(255, 255, 255, 0.28) !important;
+                background:
+                    linear-gradient(
+                        180deg,
+                        #ff004d 0%,
+                        #ff7a00 16%,
+                        #ffd400 32%,
+                        #38d66b 48%,
+                        #00c2ff 64%,
+                        #4f46e5 82%,
+                        #c026d3 100%
+                    ) 0 0 / 100% 240%;
+                box-shadow:
+                    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+                    0 0 14px rgba(255, 255, 255, 0.08);
+                animation: dtt-rainbow-badge-flow 3.2s linear infinite;
+            }
+
+            @keyframes dtt-rainbow-badge-flow {
+                0% {
+                    background-position: 0 0%;
+                }
+                100% {
+                    background-position: 0 100%;
+                }
             }
 
             .dtt-badge-pill[hidden] {
@@ -2089,9 +2486,13 @@
         badgePill.className = "dtt-badge-pill";
         if (state.badge) {
             badgePill.textContent = state.badge.label;
-            badgePill.style.color = state.badge.color;
-            badgePill.style.background = state.badge.bg;
-            badgePill.style.borderColor = state.badge.color + "40";
+            if (state.badge.effect === "rainbow") {
+                badgePill.classList.add("is-rainbow");
+            } else {
+                badgePill.style.color = state.badge.color;
+                badgePill.style.background = state.badge.bg;
+                badgePill.style.borderColor = state.badge.color + "40";
+            }
         } else {
             badgePill.hidden = true;
         }
@@ -2343,6 +2744,54 @@
         exportRow.append(exportTitle, exportContent);
         settingsPanel.appendChild(exportRow);
 
+        const importRow = document.createElement("div");
+        importRow.className = "dtt-settings-row";
+        const importTitle = document.createElement("div");
+        importTitle.className = "dtt-settings-row-label";
+        importTitle.textContent = t("importTitle");
+        const importHint = document.createElement("div");
+        importHint.className = "dtt-settings-row-hint";
+        importHint.textContent = t("importHint");
+        const importActions = document.createElement("div");
+        importActions.className = "dtt-settings-actions";
+
+        const importMergeBtn = document.createElement("button");
+        importMergeBtn.type = "button";
+        importMergeBtn.className = "dtt-language-button";
+        importMergeBtn.textContent = t("importMerge");
+        importMergeBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openImportPicker("merge");
+        });
+
+        const importReplaceBtn = document.createElement("button");
+        importReplaceBtn.type = "button";
+        importReplaceBtn.className = "dtt-language-button";
+        importReplaceBtn.textContent = t("importReplace");
+        importReplaceBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openImportPicker("replace");
+        });
+
+        const importFileInput = document.createElement("input");
+        importFileInput.type = "file";
+        importFileInput.accept = "application/json,.json";
+        importFileInput.style.display = "none";
+        importFileInput.addEventListener("click", (event) => event.stopPropagation());
+        importFileInput.addEventListener("change", async (event) => {
+            event.stopPropagation();
+            const file = event.target.files?.[0];
+            const mode = event.target.dataset.importMode === "replace" ? "replace" : "merge";
+            await importJsonFile(file, mode);
+            event.target.value = "";
+        });
+
+        importActions.append(importMergeBtn, importReplaceBtn);
+        importRow.append(importTitle, importHint, importActions, importFileInput);
+        settingsPanel.appendChild(importRow);
+
         const resetRow = document.createElement("div");
         resetRow.className = "dtt-settings-row";
         const resetTitle = document.createElement("div");
@@ -2426,6 +2875,11 @@
         state.popup.exportTitleNode = exportTitle;
         state.popup.exportCsvBtnNode = csvBtn;
         state.popup.exportJsonBtnNode = jsonBtn;
+        state.popup.importTitleNode = importTitle;
+        state.popup.importHintNode = importHint;
+        state.popup.importMergeBtnNode = importMergeBtn;
+        state.popup.importReplaceBtnNode = importReplaceBtn;
+        state.popup.importFileInputNode = importFileInput;
         state.popup.resetDataTitleNode = resetTitle;
         state.popup.resetDataHintNode = resetHint;
         state.popup.resetTodayBtnNode = resetTodayBtn;
@@ -2582,6 +3036,18 @@
         }
         if (state.popup.exportJsonBtnNode) {
             state.popup.exportJsonBtnNode.textContent = t("exportJson");
+        }
+        if (state.popup.importTitleNode) {
+            state.popup.importTitleNode.textContent = t("importTitle");
+        }
+        if (state.popup.importHintNode) {
+            state.popup.importHintNode.textContent = t("importHint");
+        }
+        if (state.popup.importMergeBtnNode) {
+            state.popup.importMergeBtnNode.textContent = t("importMerge");
+        }
+        if (state.popup.importReplaceBtnNode) {
+            state.popup.importReplaceBtnNode.textContent = t("importReplace");
         }
         if (state.popup.resetDataTitleNode) {
             state.popup.resetDataTitleNode.textContent = t("resetDataTitle");
@@ -2765,6 +3231,11 @@
         state.popup.exportTitleNode = null;
         state.popup.exportCsvBtnNode = null;
         state.popup.exportJsonBtnNode = null;
+        state.popup.importTitleNode = null;
+        state.popup.importHintNode = null;
+        state.popup.importMergeBtnNode = null;
+        state.popup.importReplaceBtnNode = null;
+        state.popup.importFileInputNode = null;
         state.popup.resetDataTitleNode = null;
         state.popup.resetDataHintNode = null;
         state.popup.resetTodayBtnNode = null;
@@ -3065,7 +3536,12 @@
             clearInterval(state.runtime.updateCheckIntervalId);
             state.runtime.updateCheckIntervalId = null;
         }
+        if (state.runtime.apiHealthCheckIntervalId !== null) {
+            clearInterval(state.runtime.apiHealthCheckIntervalId);
+            state.runtime.apiHealthCheckIntervalId = null;
+        }
         hideUpdateModal();
+        hideApiUnavailableModal();
         state.runtime.injectObserver?.disconnect?.();
         state.runtime.injectObserver = null;
         if (state.runtime.injectRetryTimeoutId !== null) {
@@ -3110,6 +3586,11 @@
         state.popup.exportTitleNode = null;
         state.popup.exportCsvBtnNode = null;
         state.popup.exportJsonBtnNode = null;
+        state.popup.importTitleNode = null;
+        state.popup.importHintNode = null;
+        state.popup.importMergeBtnNode = null;
+        state.popup.importReplaceBtnNode = null;
+        state.popup.importFileInputNode = null;
         state.popup.resetDataTitleNode = null;
         state.popup.resetDataHintNode = null;
         state.popup.resetTodayBtnNode = null;
