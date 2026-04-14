@@ -2658,6 +2658,72 @@
         settingsPanel.appendChild(langRow);
 
         // Retention row
+        const streakProgressionRow = document.createElement("div");
+        streakProgressionRow.className = "dtt-settings-row";
+        const streakProgressionTitle = document.createElement("div");
+        streakProgressionTitle.className = "dtt-settings-row-label";
+        streakProgressionTitle.textContent = t("streakProgressionLabel");
+        const streakProgressionContent = document.createElement("div");
+        streakProgressionContent.className = "dtt-settings-row-content is-between";
+        const streakProgressionHint = document.createElement("div");
+        streakProgressionHint.className = "dtt-settings-row-hint";
+        streakProgressionHint.textContent = t("streakProgressionHint");
+        const streakProgressionInput = document.createElement("input");
+        streakProgressionInput.type = "checkbox";
+        streakProgressionInput.className = "dtt-settings-checkbox";
+        streakProgressionInput.checked = state.longStreakProgressionEnabled;
+        streakProgressionInput.addEventListener("click", (event) => event.stopPropagation());
+        streakProgressionInput.addEventListener("change", (event) => {
+            event.stopPropagation();
+            applyLongStreakProgressionEnabled(event.target.checked);
+            updatePopupStaticTextV2();
+            updatePopupFireIcon();
+            syncVisibleUI();
+        });
+        streakProgressionContent.append(streakProgressionHint, streakProgressionInput);
+
+        const streakProgressionPreview = document.createElement("div");
+        streakProgressionPreview.className = "dtt-settings-row-hint";
+        streakProgressionPreview.textContent = `${t("streakProgressionTiersLabel")}: ${getStreakTierPreviewText()}`;
+
+        streakProgressionRow.append(streakProgressionTitle, streakProgressionContent, streakProgressionPreview);
+        settingsPanel.appendChild(streakProgressionRow);
+
+        const carryOverRow = document.createElement("div");
+        carryOverRow.className = "dtt-settings-row";
+        const carryOverTitle = document.createElement("div");
+        carryOverTitle.className = "dtt-settings-row-label";
+        carryOverTitle.textContent = getCarryOverTimerLabel();
+        const carryOverContent = document.createElement("div");
+        carryOverContent.className = "dtt-settings-row-content is-between";
+        carryOverContent.title = getCarryOverTimerDisabledTooltip();
+        const carryOverHint = document.createElement("div");
+        carryOverHint.className = "dtt-settings-row-hint";
+        carryOverHint.textContent = getCarryOverTimerHint();
+        carryOverHint.title = getCarryOverTimerDisabledTooltip();
+        const carryOverInput = document.createElement("input");
+        carryOverInput.type = "checkbox";
+        carryOverInput.className = "dtt-settings-checkbox";
+        carryOverInput.checked = false;
+        carryOverInput.title = getCarryOverTimerDisabledTooltip();
+        carryOverInput.setAttribute("aria-disabled", "true");
+        carryOverInput.style.opacity = "0.55";
+        carryOverInput.style.cursor = "not-allowed";
+        carryOverInput.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            carryOverInput.checked = false;
+        });
+        carryOverInput.addEventListener("change", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            event.target.checked = false;
+        });
+
+        carryOverContent.append(carryOverHint, carryOverInput);
+        carryOverRow.append(carryOverTitle, carryOverContent);
+        settingsPanel.appendChild(carryOverRow);
+
         const retRow = document.createElement("div");
         retRow.className = "dtt-settings-row";
         const retTitle = document.createElement("div");
@@ -2695,63 +2761,6 @@
         retRow.append(retTitle, retContent);
         settingsPanel.appendChild(retRow);
 
-        const streakProgressionRow = document.createElement("div");
-        streakProgressionRow.className = "dtt-settings-row";
-        const streakProgressionTitle = document.createElement("div");
-        streakProgressionTitle.className = "dtt-settings-row-label";
-        streakProgressionTitle.textContent = t("streakProgressionLabel");
-        const streakProgressionContent = document.createElement("div");
-        streakProgressionContent.className = "dtt-settings-row-content is-between";
-        const streakProgressionHint = document.createElement("div");
-        streakProgressionHint.className = "dtt-settings-row-hint";
-        streakProgressionHint.textContent = t("streakProgressionHint");
-        const streakProgressionInput = document.createElement("input");
-        streakProgressionInput.type = "checkbox";
-        streakProgressionInput.className = "dtt-settings-checkbox";
-        streakProgressionInput.checked = state.longStreakProgressionEnabled;
-        streakProgressionInput.addEventListener("click", (event) => event.stopPropagation());
-        streakProgressionInput.addEventListener("change", (event) => {
-            event.stopPropagation();
-            applyLongStreakProgressionEnabled(event.target.checked);
-            updatePopupStaticTextV2();
-            updatePopupFireIcon();
-            syncVisibleUI();
-        });
-        streakProgressionContent.append(streakProgressionHint, streakProgressionInput);
-
-        const streakProgressionPreview = document.createElement("div");
-        streakProgressionPreview.className = "dtt-settings-row-hint";
-        streakProgressionPreview.textContent = `${t("streakProgressionTiersLabel")}: ${getStreakTierPreviewText()}`;
-
-        streakProgressionRow.append(streakProgressionTitle, streakProgressionContent, streakProgressionPreview);
-        settingsPanel.appendChild(streakProgressionRow);
-
-        const updateRow = document.createElement("div");
-        updateRow.className = "dtt-settings-row";
-        const updateTitle = document.createElement("div");
-        updateTitle.className = "dtt-settings-row-label";
-        updateTitle.textContent = t("updateCheckTitle");
-        const updateHint = document.createElement("div");
-        updateHint.className = "dtt-settings-row-hint";
-        updateHint.textContent = t("updateCheckHint");
-        const updateActions = document.createElement("div");
-        updateActions.className = "dtt-settings-actions is-soft";
-
-        const updateCheckBtn = document.createElement("button");
-        updateCheckBtn.type = "button";
-        updateCheckBtn.className = "dtt-language-button dtt-settings-action-button";
-        updateCheckBtn.textContent = t("updateCheckButton");
-        updateCheckBtn.addEventListener("click", async (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            await checkForUpdates({ manual: true });
-        });
-
-        updateActions.append(updateCheckBtn);
-        updateRow.append(updateTitle, updateHint, updateActions);
-        settingsPanel.appendChild(updateRow);
-
-        // Export row
         const exportRow = document.createElement("div");
         exportRow.className = "dtt-settings-row";
         const exportTitle = document.createElement("div");
@@ -2833,41 +2842,32 @@
         importRow.append(importTitle, importHint, importActions, importFileInput);
         settingsPanel.appendChild(importRow);
 
-        const carryOverRow = document.createElement("div");
-        carryOverRow.className = "dtt-settings-row";
-        const carryOverTitle = document.createElement("div");
-        carryOverTitle.className = "dtt-settings-row-label";
-        carryOverTitle.textContent = getCarryOverTimerLabel();
-        const carryOverContent = document.createElement("div");
-        carryOverContent.className = "dtt-settings-row-content is-between";
-        carryOverContent.title = getCarryOverTimerDisabledTooltip();
-        const carryOverHint = document.createElement("div");
-        carryOverHint.className = "dtt-settings-row-hint";
-        carryOverHint.textContent = getCarryOverTimerHint();
-        carryOverHint.title = getCarryOverTimerDisabledTooltip();
-        const carryOverInput = document.createElement("input");
-        carryOverInput.type = "checkbox";
-        carryOverInput.className = "dtt-settings-checkbox";
-        carryOverInput.checked = false;
-        carryOverInput.title = getCarryOverTimerDisabledTooltip();
-        carryOverInput.setAttribute("aria-disabled", "true");
-        carryOverInput.style.opacity = "0.55";
-        carryOverInput.style.cursor = "not-allowed";
-        carryOverInput.addEventListener("click", (event) => {
+        const updateRow = document.createElement("div");
+        updateRow.className = "dtt-settings-row";
+        const updateTitle = document.createElement("div");
+        updateTitle.className = "dtt-settings-row-label";
+        updateTitle.textContent = t("updateCheckTitle");
+        const updateHint = document.createElement("div");
+        updateHint.className = "dtt-settings-row-hint";
+        updateHint.textContent = t("updateCheckHint");
+        const updateActions = document.createElement("div");
+        updateActions.className = "dtt-settings-actions is-soft";
+
+        const updateCheckBtn = document.createElement("button");
+        updateCheckBtn.type = "button";
+        updateCheckBtn.className = "dtt-language-button dtt-settings-action-button";
+        updateCheckBtn.textContent = t("updateCheckButton");
+        updateCheckBtn.addEventListener("click", async (event) => {
             event.preventDefault();
             event.stopPropagation();
-            carryOverInput.checked = false;
-        });
-        carryOverInput.addEventListener("change", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            event.target.checked = false;
+            await checkForUpdates({ manual: true });
         });
 
-        carryOverContent.append(carryOverHint, carryOverInput);
-        carryOverRow.append(carryOverTitle, carryOverContent);
-        settingsPanel.appendChild(carryOverRow);
+        updateActions.append(updateCheckBtn);
+        updateRow.append(updateTitle, updateHint, updateActions);
+        settingsPanel.appendChild(updateRow);
 
+        // Export row
         const resetRow = document.createElement("div");
         resetRow.className = "dtt-settings-row";
         const resetTitle = document.createElement("div");
