@@ -22,19 +22,21 @@
         historyKey: "dtt_history_v2",
         languageKey: "dtt_language_v1",
         retentionKey: "dtt_history_retention_months_v1",
-        carryOverTimerKey: "dtt_carry_over_timer_enabled_v1",
+        popupModeKey: "dtt_popup_mode_v1",
+        pauseThresholdKey: "dtt_pause_threshold_seconds_v1",
         longStreakProgressionKey: "dtt_long_streak_progression_enabled_v1",
-        widgetCarryoverKey: "dtt_widget_carryover_v1",
         streakKey: "dtt_streak_v1",
+        streakControlKey: "dtt_streak_control_v1",
         versionKey: "dtt_version_v1",
         versionCheckUrl: "https://vvertax.site/dtt/ext/version.json",
         versionCheckIntervalMs: 300000,
         badgeApiBaseUrl: "https://vvertax.site/dtt/api/badge.php",
         apiHealthCheckIntervalMs: 300000,
         streakThresholdSeconds: 300,
+        streakShieldsPerMonth: 4,
         historyRetentionMonths: 1,
         maxHistoryRetentionMonths: 6,
-        pauseSeconds: 30,
+        defaultPauseSeconds: 30,
         saveIntervalSeconds: 10,
         tickMs: 1000,
         hidePopupDelayMs: 120,
@@ -58,7 +60,7 @@
         ]
     };
 
-    const VERSION = "1.6.2";
+    const VERSION = "1.7.0";
 
     let historyCache = null;
 
@@ -66,10 +68,11 @@
         day: null,
         language: loadLanguage(),
         historyRetentionMonths: loadHistoryRetentionMonths(),
-        carryOverTimerEnabled: loadCarryOverTimerEnabled(),
+        popupMode: loadPopupMode(),
+        pauseSeconds: loadPauseSeconds(),
         longStreakProgressionEnabled: loadLongStreakProgressionEnabled(),
-        widgetCarryoverSeconds: loadWidgetCarryoverSeconds(),
         streak: loadStreakData(),
+        streakControl: loadStreakControlData(),
         badge: null,
         currentSession: null,
         idleStartedAt: null,
@@ -81,18 +84,29 @@
             isPinned: false,
             hideTimeoutId: null,
             removeTimeoutId: null,
+            viewMode: "today",
+            viewToggleNode: null,
             hintNode: null,
             titleNode: null,
             summaryDateNode: null,
             summaryTotalNode: null,
+            intervalsSectionNode: null,
             sessionsTitleNode: null,
             intervalsListNode: null,
             todaySessionsToggleNode: null,
             todaySessionsExpanded: false,
+            historySectionNode: null,
             historyTitleNode: null,
             historyListNode: null,
             historyToggleNode: null,
             historyExpanded: false,
+            weeklySectionNode: null,
+            weeklySectionTitleNode: null,
+            weeklyAverageLabelNode: null,
+            weeklyAverageValueNode: null,
+            weeklyBestDayLabelNode: null,
+            weeklyBestDayValueNode: null,
+            weeklyBarsNode: null,
             lastHistorySignature: "",
             lastLanguage: null,
             languageButtons: [],
@@ -103,10 +117,19 @@
             settingsBackNode: null,
             settingsPanelNode: null,
             settingsLangTitleNode: null,
+            settingsPopupModeTitleNode: null,
+            settingsPopupModeHintNode: null,
+            settingsPopupModeButtons: [],
+            settingsPauseThresholdTitleNode: null,
+            settingsPauseThresholdHintNode: null,
+            settingsPauseThresholdButtons: [],
+            settingsStreakShieldsTitleNode: null,
+            settingsStreakShieldsHintNode: null,
+            settingsKeepStreakTitleNode: null,
+            settingsKeepStreakHintNode: null,
+            settingsKeepStreakInputNode: null,
+            settingsKeepStreakPreviewNode: null,
             settingsRetentionTitleNode: null,
-            settingsCarryOverTitleNode: null,
-            settingsCarryOverHintNode: null,
-            settingsCarryOverInputNode: null,
             settingsStreakProgressionTitleNode: null,
             settingsStreakProgressionHintNode: null,
             settingsStreakProgressionInputNode: null,
@@ -127,6 +150,7 @@
             resetTodayBtnNode: null,
             clearHistoryBtnNode: null,
             fullWipeBtnNode: null,
+            settingsVersionNode: null,
             popupFireNode: null,
             popupStreakCountNode: null,
             lastHeight: 0
@@ -167,6 +191,18 @@
             settingsTitle: "Настройки",
             settingsBack: "Назад",
             languageLabel: "Язык",
+            popupModeLabel: "Режим popup",
+            popupModeHint: "Compact делает popup короче, Full показывает все сессии, всю историю и weekly view.",
+            popupModeCompact: "Compact",
+            popupModeFull: "Full",
+            pauseThresholdLabel: "Порог паузы",
+            pauseThresholdHint: "Через сколько секунд паузы текущая сессия считается завершенной.",
+            streakShieldsLabel: "Щиты серии",
+            streakShieldsHint: "До 4 пропущенных дней в календарном месяце защищаются автоматически без роста серии.",
+            streakShieldsRemaining: "Осталось щитов в этом месяце",
+            keepStreakLabel: "Keep streak",
+            keepStreakHint: "Сохраняет текущую серию без роста, пока режим включен.",
+            keepStreakProtectedToday: "Сегодня серия защищена вручную",
             languageRu: "RU",
             languageEn: "EN",
             streakLabel: "Серия",
@@ -205,6 +241,13 @@
             resetToday: "Сбросить сегодня",
             clearHistory: "Очистить историю",
             fullWipe: "Полный сброс",
+            weeklyToggle: "Неделя",
+            weeklyToggleTitle: "Показать недельную сводку",
+            weeklyRangeLabel: "Последние 7 дней",
+            weeklySummaryTitle: "Недельная сводка",
+            weeklyAverageLabel: "Среднее в день",
+            weeklyBestDayLabel: "Самый активный день",
+            weeklyBestDayEmpty: "Нет данных",
             confirmResetToday: "Сбросить данные за сегодня? История останется нетронутой.",
             confirmClearHistory: "Очистить всю архивную историю? Данные за сегодня останутся.",
             confirmFullWipe: "Полностью удалить все данные Daily Time Tracker и сбросить настройки?",
@@ -232,6 +275,18 @@
             settingsTitle: "Settings",
             settingsBack: "Back",
             languageLabel: "Language",
+            popupModeLabel: "Popup mode",
+            popupModeHint: "Compact keeps the popup shorter. Full shows all sessions, full history, and the weekly view toggle.",
+            popupModeCompact: "Compact",
+            popupModeFull: "Full",
+            pauseThresholdLabel: "Pause threshold",
+            pauseThresholdHint: "How many paused seconds are allowed before the current session is closed.",
+            streakShieldsLabel: "Streak shields",
+            streakShieldsHint: "Up to 4 missed days per calendar month are protected automatically without growing the streak.",
+            streakShieldsRemaining: "Shields left this month",
+            keepStreakLabel: "Keep streak",
+            keepStreakHint: "Preserves the current streak without growth while enabled.",
+            keepStreakProtectedToday: "The streak is manually protected today",
             languageRu: "RU",
             languageEn: "EN",
             streakLabel: "Streak",
@@ -270,6 +325,13 @@
             resetToday: "Reset today",
             clearHistory: "Clear history",
             fullWipe: "Full wipe",
+            weeklyToggle: "Week",
+            weeklyToggleTitle: "Show weekly summary",
+            weeklyRangeLabel: "Last 7 days",
+            weeklySummaryTitle: "Weekly Summary",
+            weeklyAverageLabel: "Daily average",
+            weeklyBestDayLabel: "Most active day",
+            weeklyBestDayEmpty: "No data",
             confirmResetToday: "Reset today's data? History will be kept.",
             confirmClearHistory: "Clear all archived history? Today's data will be kept.",
             confirmFullWipe: "Delete all Daily Time Tracker data and reset settings?",
@@ -349,10 +411,6 @@
         console.log("[DailyTimeTracker] Streak reset to real value:", state.streak.current);
     };
 
-    if (!state.currentSession && !Spicetify.Player.isPlaying() && state.widgetCarryoverSeconds > 0) {
-        resetWidgetCarryover();
-    }
-
     function pad2(value) {
         return String(value).padStart(2, "0");
     }
@@ -402,6 +460,22 @@
     function formatClockTime(timestamp) {
         const date = new Date(timestamp);
         return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+    }
+
+    function parseLocalDateString(dateString) {
+        return new Date(`${dateString}T12:00:00`);
+    }
+
+    function shiftDateString(dateString, dayOffset) {
+        const date = parseLocalDateString(dateString);
+        date.setDate(date.getDate() + dayOffset);
+        return formatDateString(date);
+    }
+
+    function formatWeekdayLabel(dateString) {
+        return new Intl.DateTimeFormat(state.language === "ru" ? "ru-RU" : "en-US", {
+            weekday: "short"
+        }).format(parseLocalDateString(dateString));
     }
 
     function safeParse(value, fallback) {
@@ -522,20 +596,79 @@
         );
     }
 
-    function loadCarryOverTimerEnabled() {
-        Spicetify.LocalStorage.set(CONFIG.carryOverTimerKey, "0");
-        return false;
+    function loadPopupMode() {
+        return Spicetify.LocalStorage.get(CONFIG.popupModeKey) === "full" ? "full" : "compact";
+    }
+
+    function normalizePauseSeconds(value) {
+        const normalized = Math.floor(Number(value) || CONFIG.defaultPauseSeconds);
+        return [15, 30, 60, 120].includes(normalized) ? normalized : CONFIG.defaultPauseSeconds;
+    }
+
+    function loadPauseSeconds() {
+        return normalizePauseSeconds(Spicetify.LocalStorage.get(CONFIG.pauseThresholdKey));
+    }
+
+    function normalizeKeepPeriod(period) {
+        if (!period || typeof period.start !== "string" || !period.start) {
+            return null;
+        }
+
+        const start = period.start;
+        const end = typeof period.end === "string" ? period.end : "";
+        return {
+            start,
+            end: end && end >= start ? end : ""
+        };
+    }
+
+    function normalizeStreakControlData(data) {
+        const keepPeriods = Array.isArray(data?.keepPeriods)
+            ? data.keepPeriods.map(normalizeKeepPeriod).filter(Boolean)
+            : [];
+
+        return {
+            keepStreakEnabled: Boolean(data?.keepStreakEnabled),
+            keepPeriods
+        };
+    }
+
+    function normalizeStreakData(data) {
+        const current = Math.max(0, Math.floor(Number(data?.current) || 0));
+        const best = Math.max(current, Math.floor(Number(data?.best) || 0));
+        const lastDate = typeof data?.lastDate === "string" ? data.lastDate : "";
+        const shieldsUsedByMonth = {};
+
+        if (data?.shieldsUsedByMonth && typeof data.shieldsUsedByMonth === "object") {
+            for (const [monthKey, value] of Object.entries(data.shieldsUsedByMonth)) {
+                if (!/^\d{4}-\d{2}$/.test(monthKey)) {
+                    continue;
+                }
+                shieldsUsedByMonth[monthKey] = Math.max(0, Math.floor(Number(value) || 0));
+            }
+        }
+
+        const currentMonthKey = getTodayString().slice(0, 7);
+        const storedCurrentMonth = Math.max(0, Math.floor(Number(data?.shieldsUsedCurrentMonth) || 0));
+
+        return {
+            current,
+            best,
+            lastDate,
+            shieldsUsedByMonth,
+            shieldsUsedCurrentMonth: shieldsUsedByMonth[currentMonthKey] ?? storedCurrentMonth,
+            keepProtectedToday: Boolean(data?.keepProtectedToday)
+        };
+    }
+
+    function loadStreakControlData() {
+        return normalizeStreakControlData(
+            safeParse(Spicetify.LocalStorage.get(CONFIG.streakControlKey), null)
+        );
     }
 
     function loadLongStreakProgressionEnabled() {
         return Spicetify.LocalStorage.get(CONFIG.longStreakProgressionKey) === "1";
-    }
-
-    function saveCarryOverTimerEnabled() {
-        Spicetify.LocalStorage.set(
-            CONFIG.carryOverTimerKey,
-            state.carryOverTimerEnabled ? "1" : "0"
-        );
     }
 
     function saveLongStreakProgressionEnabled() {
@@ -545,16 +678,20 @@
         );
     }
 
-    function loadWidgetCarryoverSeconds() {
-        return Math.max(0, Math.floor(Number(Spicetify.LocalStorage.get(CONFIG.widgetCarryoverKey)) || 0));
-    }
-
-    function saveWidgetCarryoverSeconds() {
-        Spicetify.LocalStorage.set(CONFIG.widgetCarryoverKey, String(state.widgetCarryoverSeconds));
-    }
-
     function saveHistoryRetentionMonths() {
         Spicetify.LocalStorage.set(CONFIG.retentionKey, String(state.historyRetentionMonths));
+    }
+
+    function savePopupMode() {
+        Spicetify.LocalStorage.set(CONFIG.popupModeKey, state.popupMode);
+    }
+
+    function savePauseSeconds() {
+        Spicetify.LocalStorage.set(CONFIG.pauseThresholdKey, String(state.pauseSeconds));
+    }
+
+    function saveStreakControlData() {
+        Spicetify.LocalStorage.set(CONFIG.streakControlKey, JSON.stringify(state.streakControl));
     }
 
     function loadLanguage() {
@@ -570,28 +707,8 @@
         return I18N[state.language][key];
     }
 
-    function getCarryOverTimerLabel() {
-        if (state.language === "ru") {
-            return "\u041d\u0435 \u0441\u0431\u0440\u0430\u0441\u044b\u0432\u0430\u0442\u044c \u0432\u0435\u0440\u0445\u043d\u0438\u0439 \u0442\u0430\u0439\u043c\u0435\u0440 \u043f\u043e\u0441\u043b\u0435 00:00";
-        }
-
-        return "Keep top timer running after 00:00";
-    }
-
-    function getCarryOverTimerHint() {
-        if (state.language === "ru") {
-            return "\u0424\u0443\u043d\u043a\u0446\u0438\u044f \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u043e \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u0430, \u043f\u043e\u0442\u043e\u043c\u0443 \u0447\u0442\u043e \u0441\u0435\u0439\u0447\u0430\u0441 \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u0442 \u043d\u0435\u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043d\u043e.";
-        }
-
-        return "This feature is temporarily disabled because it currently does not work correctly.";
-    }
-
-    function getCarryOverTimerDisabledTooltip() {
-        if (state.language === "ru") {
-            return "\u0424\u0443\u043d\u043a\u0446\u0438\u044f \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u043e \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u0430, \u0442\u0430\u043a \u043a\u0430\u043a \u0441\u0435\u0439\u0447\u0430\u0441 \u043d\u0435 \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u0442.";
-        }
-
-        return "Feature temporarily disabled because it does not work right now.";
+    function isFullPopupMode() {
+        return state.popupMode === "full";
     }
 
     function saveHistory(history) {
@@ -610,18 +727,66 @@
         historyCache = null;
     }
 
-    function applyCarryOverTimerEnabled(nextValue) {
-        const normalized = Boolean(nextValue);
-        if (normalized === state.carryOverTimerEnabled) {
+    function applyPopupMode(nextMode) {
+        const normalized = nextMode === "full" ? "full" : "compact";
+        if (normalized === state.popupMode) {
             return;
         }
 
-        state.carryOverTimerEnabled = normalized;
-        saveCarryOverTimerEnabled();
+        state.popupMode = normalized;
+        savePopupMode();
 
-        if (!normalized) {
-            resetWidgetCarryover();
+        if (!isFullPopupMode()) {
+            state.popup.viewMode = "today";
+            state.popup.todaySessionsExpanded = false;
+            state.popup.historyExpanded = false;
         }
+    }
+
+    function applyPauseSeconds(nextValue) {
+        const normalized = normalizePauseSeconds(nextValue);
+        if (normalized === state.pauseSeconds) {
+            return;
+        }
+
+        state.pauseSeconds = normalized;
+        savePauseSeconds();
+
+        const now = Date.now();
+        updateTrackingState(now);
+        syncVisibleUI(now);
+    }
+
+    function applyKeepStreakEnabled(nextValue) {
+        const normalized = Boolean(nextValue);
+        if (normalized === state.streakControl.keepStreakEnabled) {
+            return;
+        }
+
+        const today = getTodayString();
+        const nextControl = normalizeStreakControlData(state.streakControl);
+
+        if (normalized) {
+            nextControl.keepPeriods.push({ start: today, end: "" });
+        } else {
+            for (let i = nextControl.keepPeriods.length - 1; i >= 0; i--) {
+                if (!nextControl.keepPeriods[i].end) {
+                    const endDate = shiftDateString(today, -1);
+                    if (endDate < nextControl.keepPeriods[i].start) {
+                        nextControl.keepPeriods.splice(i, 1);
+                    } else {
+                        nextControl.keepPeriods[i].end = endDate;
+                    }
+                    break;
+                }
+            }
+        }
+
+        nextControl.keepStreakEnabled = normalized;
+        state.streakControl = nextControl;
+        saveStreakControlData();
+        computeStreak();
+        syncVisibleUI();
     }
 
     function applyLongStreakProgressionEnabled(nextValue) {
@@ -635,12 +800,20 @@
     }
 
     function loadStreakData() {
-        const fallback = { current: 0, best: 0, lastDate: "" };
-        return safeParse(Spicetify.LocalStorage.get(CONFIG.streakKey), fallback);
+        return normalizeStreakData(
+            safeParse(Spicetify.LocalStorage.get(CONFIG.streakKey), null)
+        );
     }
 
     function saveStreakData() {
         Spicetify.LocalStorage.set(CONFIG.streakKey, JSON.stringify(state.streak));
+    }
+
+    function isDateProtectedByKeep(dateString) {
+        return state.streakControl.keepPeriods.some((period) => {
+            const end = period.end || "9999-12-31";
+            return dateString >= period.start && dateString <= end;
+        });
     }
 
     function loadStreakThreshold() {
@@ -657,34 +830,86 @@
         allDays[today] = { totalSeconds: todayTotal, intervals: [] };
 
         let current = 0;
+        const shieldsUsedByMonth = {};
         const dateObj = new Date();
 
         for (let i = 0; i < 400; i++) {
             const dateStr = formatDateString(dateObj);
             const entry = allDays[dateStr];
             const dayTotal = entry ? Math.max(0, Math.floor(Number(entry.totalSeconds) || 0)) : 0;
+            const monthKey = dateStr.slice(0, 7);
+            const isKeepProtected = isDateProtectedByKeep(dateStr);
 
-            if (i === 0) {
-                if (dayTotal >= threshold) {
-                    current++;
-                }
-            } else {
-                if (dayTotal >= threshold) {
-                    current++;
-                } else {
-                    break;
-                }
+            if (isKeepProtected) {
+                dateObj.setDate(dateObj.getDate() - 1);
+                continue;
             }
 
-            dateObj.setDate(dateObj.getDate() - 1);
+            if (dayTotal >= threshold) {
+                current++;
+                dateObj.setDate(dateObj.getDate() - 1);
+                continue;
+            }
+
+            const usedThisMonth = shieldsUsedByMonth[monthKey] || 0;
+            if (usedThisMonth < CONFIG.streakShieldsPerMonth) {
+                shieldsUsedByMonth[monthKey] = usedThisMonth + 1;
+                dateObj.setDate(dateObj.getDate() - 1);
+                continue;
+            }
+
+            break;
         }
 
+        const currentMonthKey = today.slice(0, 7);
         state.streak.current = current;
+        state.streak.shieldsUsedByMonth = shieldsUsedByMonth;
+        state.streak.shieldsUsedCurrentMonth = shieldsUsedByMonth[currentMonthKey] || 0;
+        state.streak.keepProtectedToday = isDateProtectedByKeep(today);
         if (current > state.streak.best) {
             state.streak.best = current;
         }
         state.streak.lastDate = today;
         saveStreakData();
+    }
+
+    function getRemainingStreakShieldsText() {
+        const remaining = Math.max(0, CONFIG.streakShieldsPerMonth - (state.streak.shieldsUsedCurrentMonth || 0));
+        return `${remaining}/${CONFIG.streakShieldsPerMonth}`;
+    }
+
+    function isStreakAwaitingRefresh(now = Date.now()) {
+        if (state.runtime._streakTestMode || state.streak.current < 2) {
+            return false;
+        }
+
+        if (state.streak.keepProtectedToday) {
+            return true;
+        }
+
+        return getComputedDayTotalSeconds(now) < loadStreakThreshold();
+    }
+
+    function updateStreakProtectionUi() {
+        if (state.popup.settingsStreakShieldsTitleNode) {
+            state.popup.settingsStreakShieldsTitleNode.textContent = t("streakShieldsLabel");
+        }
+        if (state.popup.settingsStreakShieldsHintNode) {
+            state.popup.settingsStreakShieldsHintNode.textContent = `${t("streakShieldsHint")} ${t("streakShieldsRemaining")}: ${getRemainingStreakShieldsText()}.`;
+        }
+        if (state.popup.settingsKeepStreakTitleNode) {
+            state.popup.settingsKeepStreakTitleNode.textContent = t("keepStreakLabel");
+        }
+        if (state.popup.settingsKeepStreakHintNode) {
+            const suffix = state.streak.keepProtectedToday ? ` ${t("keepStreakProtectedToday")}.` : "";
+            state.popup.settingsKeepStreakHintNode.textContent = `${t("keepStreakHint")}${suffix}`;
+        }
+        if (state.popup.settingsKeepStreakInputNode) {
+            state.popup.settingsKeepStreakInputNode.checked = state.streakControl.keepStreakEnabled;
+        }
+        if (state.popup.settingsKeepStreakPreviewNode) {
+            state.popup.settingsKeepStreakPreviewNode.textContent = `${t("streakShieldsRemaining")}: ${getRemainingStreakShieldsText()}`;
+        }
     }
 
     async function fetchBadge() {
@@ -753,10 +978,11 @@
 
     async function checkForUpdates(options = {}) {
         const manual = Boolean(options.manual);
+        const anchorEl = options.anchorEl instanceof Element ? options.anchorEl : null;
         const data = await fetchLatestVersion();
         if (!data) {
             if (manual) {
-                window.alert(t("updateCheckFailed"));
+                showUpdateStatusToast(t("updateCheckFailed"), { tone: "error", anchorEl });
             }
             return false;
         }
@@ -764,7 +990,7 @@
             syncStoredVersionWithCurrentScript();
             console.log(`[DailyTimeTracker] No updates available. Current version: ${VERSION}.`);
             if (manual) {
-                window.alert(t("updateCheckCurrent"));
+                showUpdateStatusToast(t("updateCheckCurrent"), { anchorEl });
             }
             return false;
         }
@@ -857,6 +1083,92 @@
 
     function hideUpdateModal() {
         document.getElementById("dtt-update-overlay")?.remove();
+    }
+
+    function showUpdateStatusToast(message, options = {}) {
+        hideUpdateStatusToast();
+
+        const tone = options.tone === "error" ? "error" : "success";
+        const anchorEl = options.anchorEl instanceof Element ? options.anchorEl : null;
+        const toast = document.createElement("div");
+        toast.id = "dtt-update-status-toast";
+        toast.className = `dtt-update-status-toast is-${tone}`;
+
+        const text = document.createElement("div");
+        text.className = "dtt-update-status-toast-text";
+        text.textContent = message;
+
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "dtt-update-status-toast-close";
+        closeBtn.innerHTML = "&#x2715;";
+        closeBtn.title = "Close";
+        closeBtn.addEventListener("click", () => {
+            hideUpdateStatusToast();
+        });
+
+        toast.append(text, closeBtn);
+        if (anchorEl) {
+            toast.classList.add("is-anchored");
+        }
+        toast.style.visibility = "hidden";
+        document.body.appendChild(toast);
+
+        const toastRect = toast.getBoundingClientRect();
+        if (anchorEl) {
+            const anchorRect = anchorEl.getBoundingClientRect();
+            const gap = 10;
+            const viewportMargin = 12;
+            let left = anchorRect.left + (anchorRect.width / 2) - (toastRect.width / 2);
+            let top = anchorRect.top - toastRect.height - gap;
+
+            if (top < viewportMargin) {
+                top = anchorRect.bottom + gap;
+            }
+
+            left = Math.max(
+                viewportMargin,
+                Math.min(left, window.innerWidth - toastRect.width - viewportMargin)
+            );
+            top = Math.max(
+                viewportMargin,
+                Math.min(top, window.innerHeight - toastRect.height - viewportMargin)
+            );
+
+            toast.style.left = `${left}px`;
+            toast.style.top = `${top}px`;
+            toast.style.transformOrigin = "top center";
+        }
+
+        requestAnimationFrame(() => {
+            toast.style.visibility = "";
+            toast.classList.add("is-visible");
+        });
+
+        const timeoutId = setTimeout(() => {
+            hideUpdateStatusToast();
+        }, 2600);
+
+        toast.dataset.timeoutId = String(timeoutId);
+    }
+
+    function hideUpdateStatusToast() {
+        const toast = document.getElementById("dtt-update-status-toast");
+        if (!toast) {
+            return;
+        }
+
+        const timeoutId = Number(toast.dataset.timeoutId || 0);
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+
+        toast.classList.remove("is-visible");
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        }, 180);
     }
 
     async function checkApiAvailability() {
@@ -965,25 +1277,6 @@
         return tiers[0];
     }
 
-    function resetWidgetCarryover() {
-        if (state.widgetCarryoverSeconds === 0) {
-            return;
-        }
-
-        state.widgetCarryoverSeconds = 0;
-        saveWidgetCarryoverSeconds();
-    }
-
-    function addWidgetCarryover(secondsToAdd) {
-        const normalized = Math.max(0, Math.floor(Number(secondsToAdd) || 0));
-        if (normalized <= 0) {
-            return;
-        }
-
-        state.widgetCarryoverSeconds += normalized;
-        saveWidgetCarryoverSeconds();
-    }
-
     function getStoredDayTotalSeconds(day) {
         const storedTotal = Math.max(0, Math.floor(Number(day?.totalSeconds) || 0));
         const intervalsTotal = getIntervalsTotalSeconds(Array.isArray(day?.intervals) ? day.intervals : []);
@@ -997,7 +1290,7 @@
 
         const liveEnd = state.idleStartedAt === null
             ? now
-            : Math.min(now, state.idleStartedAt + CONFIG.pauseSeconds * 1000);
+            : Math.min(now, state.idleStartedAt + state.pauseSeconds * 1000);
 
         return normalizeInterval({
             start: state.currentSession.start,
@@ -1012,10 +1305,7 @@
     }
 
     function getWidgetTotalSeconds(now = Date.now()) {
-        const dayTotalSeconds = getComputedDayTotalSeconds(now);
-        return state.carryOverTimerEnabled
-            ? state.widgetCarryoverSeconds + dayTotalSeconds
-            : dayTotalSeconds;
+        return getComputedDayTotalSeconds(now);
     }
 
     function createPersistedDaySnapshot(now = Date.now()) {
@@ -1216,7 +1506,6 @@
         state.currentSession = null;
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
-        resetWidgetCarryover();
         saveTodayData();
         computeStreak();
         updatePopupStaticTextV2();
@@ -1324,7 +1613,6 @@
             : null;
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
-        resetWidgetCarryover();
         saveTodayData(now);
         computeStreak();
         syncVisibleUI(now);
@@ -1349,17 +1637,19 @@
         clearStoredValue(CONFIG.historyKey);
         clearStoredValue(CONFIG.languageKey);
         clearStoredValue(CONFIG.retentionKey);
-        clearStoredValue(CONFIG.carryOverTimerKey);
+        clearStoredValue(CONFIG.popupModeKey);
+        clearStoredValue(CONFIG.pauseThresholdKey);
         clearStoredValue(CONFIG.longStreakProgressionKey);
-        clearStoredValue(CONFIG.widgetCarryoverKey);
         clearStoredValue(CONFIG.streakKey);
+        clearStoredValue(CONFIG.streakControlKey);
 
         state.language = "ru";
         state.historyRetentionMonths = CONFIG.historyRetentionMonths;
-        state.carryOverTimerEnabled = false;
+        state.popupMode = "compact";
+        state.pauseSeconds = CONFIG.defaultPauseSeconds;
         state.longStreakProgressionEnabled = false;
-        state.widgetCarryoverSeconds = 0;
-        state.streak = { current: 0, best: 0, lastDate: "" };
+        state.streak = normalizeStreakData(null);
+        state.streakControl = normalizeStreakControlData(null);
 
         resetRuntimeAfterDataChange(now, { keepCurrentSession: true });
         updatePopupStaticTextV2();
@@ -1436,7 +1726,6 @@
         }
 
         state.currentSession = null;
-        resetWidgetCarryover();
     }
 
     function rolloverDayIfNeeded() {
@@ -1447,7 +1736,7 @@
 
         computeStreak();
 
-        let nextSessionStart = null;
+        const wasSessionActive = Boolean(state.currentSession);
         if (state.currentSession) {
             const midnight = getMidnightTimestamp(state.day.date);
             const cappedSession = clampIntervalEnd(
@@ -1457,21 +1746,14 @@
 
             if (cappedSession) {
                 state.day.intervals.push(cappedSession);
-                if (state.carryOverTimerEnabled) {
-                    addWidgetCarryover(getIntervalsTotalSeconds(state.day.intervals));
-                    nextSessionStart = midnight;
-                }
             }
         }
 
         archiveDay(state.day);
         state.day = createEmptyDay(today);
-        state.currentSession = nextSessionStart ? { start: nextSessionStart, end: null } : null;
+        state.currentSession = wasSessionActive ? { start: getMidnightTimestamp(state.day.date), end: null } : null;
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
-        if (!nextSessionStart) {
-            resetWidgetCarryover();
-        }
         saveTodayData();
     }
 
@@ -1549,12 +1831,18 @@
                 display: inline-flex;
                 align-items: center;
                 line-height: 0;
+                transition: filter 0.3s ease, opacity 0.3s ease;
             }
 
             .dtt-fire-icon svg {
                 width: 100%;
                 height: 100%;
                 display: block;
+            }
+
+            .dtt-fire-icon.is-stale {
+                filter: grayscale(1) saturate(0) brightness(0.7);
+                opacity: 0.82;
             }
 
             .dtt-fire-icon.dtt-fire-glow {
@@ -1645,6 +1933,16 @@
                     0 32px 64px rgba(0, 0, 0, 0.55);
             }
 
+            #dtt-hover-popup.dtt-popup-mode-compact {
+                width: min(430px, calc(100vw - 32px));
+                max-height: min(62vh, 640px);
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-full {
+                width: min(540px, calc(100vw - 32px));
+                max-height: min(76vh, 780px);
+            }
+
             /* ── Header block ────────────────────────────────── */
             .dtt-popup-header {
                 display: flex;
@@ -1655,12 +1953,21 @@
                 border-bottom: 1px solid rgba(255, 255, 255, 0.06);
             }
 
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-popup-header {
+                gap: 10px;
+                padding: 13px 15px 11px;
+            }
+
             .dtt-popup-title {
                 font-size: 15px;
                 font-weight: 700;
                 letter-spacing: -0.01em;
                 color: #fff;
                 padding-top: 2px;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-popup-title {
+                font-size: 14px;
             }
 
             .dtt-popup-header-right {
@@ -1706,12 +2013,55 @@
                 color: #000;
             }
 
+            .dtt-popup-mode-hint {
+                color: #6b6b6b;
+                font-size: 12px;
+                line-height: 1.35;
+                margin-top: 10px;
+            }
+
             /* ── Hint line ───────────────────────────────────── */
             .dtt-popup-hint {
                 color: #555;
                 font-size: 11px;
                 text-align: right;
                 letter-spacing: 0.01em;
+            }
+
+            .dtt-header-actions {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .dtt-view-toggle {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 58px;
+                height: 26px;
+                padding: 0 10px;
+                border-radius: 999px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: rgba(255, 255, 255, 0.05);
+                color: #777;
+                font: inherit;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.04em;
+                cursor: pointer;
+                transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+            }
+
+            .dtt-view-toggle:hover {
+                background: rgba(255, 255, 255, 0.1);
+                color: #e0e0e0;
+            }
+
+            .dtt-view-toggle.is-active {
+                background: rgba(30, 215, 96, 0.16);
+                border-color: rgba(30, 215, 96, 0.32);
+                color: #1ed760;
             }
 
             /* ── Retention control ───────────────────────────── */
@@ -1755,12 +2105,21 @@
                 border-bottom: 1px solid rgba(255, 255, 255, 0.06);
             }
 
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-popup-summary {
+                gap: 3px;
+                padding: 16px 15px 14px;
+            }
+
             .dtt-popup-summary span {
                 font-size: 11px;
                 font-weight: 600;
                 letter-spacing: 0.07em;
                 text-transform: uppercase;
                 color: rgba(30, 215, 96, 0.6);
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-popup-summary span {
+                font-size: 10px;
             }
 
             .dtt-popup-summary strong {
@@ -1770,6 +2129,10 @@
                 color: #1ed760;
                 font-variant-numeric: tabular-nums;
                 line-height: 1;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-popup-summary strong {
+                font-size: 31px;
             }
 
             /* ── Sections wrapper (scrollable body) ──────────── */
@@ -1782,8 +2145,17 @@
                 border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             }
 
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-popup-section {
+                padding: 11px 15px;
+            }
+
             .dtt-popup-section:last-child {
                 border-bottom: 0;
+            }
+
+            .dtt-weekly-section[hidden],
+            .dtt-popup-section[hidden] {
+                display: none;
             }
 
             /* ── Section headers ─────────────────────────────── */
@@ -1796,12 +2168,22 @@
                 margin-bottom: 8px;
             }
 
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-popup-section-title {
+                font-size: 10px;
+                margin-bottom: 6px;
+            }
+
             .dtt-popup-section-heading {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 12px;
                 margin-bottom: 8px;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-popup-section-heading {
+                gap: 10px;
+                margin-bottom: 6px;
             }
 
             .dtt-popup-section-heading .dtt-popup-section-title {
@@ -1874,6 +2256,11 @@
                 transition: opacity 0.15s ease;
             }
 
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-interval-item {
+                gap: 12px;
+                padding: 7px 0;
+            }
+
             .dtt-interval-item:last-child {
                 border-bottom: 0;
             }
@@ -1888,12 +2275,20 @@
                 font-weight: 500;
             }
 
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-interval-range {
+                font-size: 12px;
+            }
+
             .dtt-interval-duration {
                 color: #606060;
                 font-size: 13px;
                 font-variant-numeric: tabular-nums;
                 white-space: nowrap;
                 font-weight: 600;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-interval-duration {
+                font-size: 12px;
             }
 
             .dtt-interval-item.is-today .dtt-interval-range {
@@ -1910,6 +2305,109 @@
                 padding: 10px 0 6px;
                 font-size: 13px;
                 font-style: italic;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-empty-state {
+                padding: 8px 0 5px;
+                font-size: 12px;
+            }
+
+            .dtt-weekly-stats {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 10px;
+                margin-bottom: 12px;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-weekly-stats {
+                gap: 8px;
+                margin-bottom: 10px;
+            }
+
+            .dtt-weekly-stat {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                padding: 12px;
+                border-radius: 12px;
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-weekly-stat {
+                gap: 5px;
+                padding: 10px;
+            }
+
+            .dtt-weekly-stat-label {
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: #5c5c5c;
+            }
+
+            .dtt-weekly-stat-value {
+                font-size: 14px;
+                font-weight: 700;
+                line-height: 1.25;
+                color: #f2f2f2;
+                font-variant-numeric: tabular-nums;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-weekly-stat-value {
+                font-size: 13px;
+            }
+
+            .dtt-weekly-bars {
+                display: grid;
+                grid-template-columns: repeat(7, minmax(0, 1fr));
+                gap: 8px;
+                align-items: end;
+                min-height: 112px;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-weekly-bars {
+                gap: 6px;
+                min-height: 96px;
+            }
+
+            .dtt-weekly-bar-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .dtt-weekly-bar-track {
+                width: 100%;
+                height: 72px;
+                border-radius: 16px;
+                background: rgba(255, 255, 255, 0.05);
+                overflow: hidden;
+                display: flex;
+                align-items: flex-end;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-weekly-bar-track {
+                height: 60px;
+            }
+
+            .dtt-weekly-bar-fill {
+                width: 100%;
+                min-height: 4px;
+                border-radius: 12px;
+                background: linear-gradient(180deg, #52f08f 0%, #1ed760 100%);
+            }
+
+            .dtt-weekly-bar-label {
+                font-size: 11px;
+                font-weight: 700;
+                color: #727272;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-weekly-bar-label {
+                font-size: 10px;
             }
 
             /* ── Settings gear button ────────────────────────── */
@@ -2003,8 +2501,47 @@
                 border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             }
 
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-settings-row {
+                gap: 8px;
+                padding: 11px 15px;
+            }
+
             .dtt-settings-row:last-child {
                 border-bottom: 0;
+            }
+
+            .dtt-settings-version {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                padding: 14px 18px 18px;
+                border: 0;
+                background: transparent;
+                color: #575757;
+                font-size: 12px;
+                text-align: center;
+                border-top: 1px solid rgba(255, 255, 255, 0.04);
+                cursor: pointer;
+                transition: color 0.15s ease;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-settings-version {
+                padding: 11px 15px 14px;
+                font-size: 11px;
+            }
+
+            .dtt-settings-version:hover {
+                color: #bdbdbd;
+            }
+
+            .dtt-settings-version:active {
+                color: #ffffff;
+            }
+
+            .dtt-settings-version:focus-visible {
+                outline: none;
+                color: #ffffff;
             }
 
             .dtt-settings-row-label {
@@ -2013,6 +2550,10 @@
                 letter-spacing: 0.1em;
                 text-transform: uppercase;
                 color: #484848;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-settings-row-label {
+                font-size: 10px;
             }
 
             .dtt-settings-row-content {
@@ -2031,6 +2572,11 @@
                 font-size: 12px;
                 line-height: 1.35;
                 flex: 1;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-settings-row-hint,
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-popup-mode-hint {
+                font-size: 11px;
             }
 
             .dtt-settings-checkbox {
@@ -2291,6 +2837,74 @@
             .dtt-update-btn-secondary:hover {
                 background: rgba(255, 255, 255, 0.14);
             }
+
+            .dtt-update-status-toast {
+                position: fixed;
+                top: 18px;
+                left: 50%;
+                z-index: 10020;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                min-width: min(360px, calc(100vw - 24px));
+                max-width: min(420px, calc(100vw - 24px));
+                padding: 14px 16px;
+                border-radius: 14px;
+                background: rgba(17, 17, 17, 0.96);
+                backdrop-filter: blur(12px);
+                box-shadow:
+                    0 0 0 1px rgba(255, 255, 255, 0.06),
+                    0 16px 36px rgba(0, 0, 0, 0.42);
+                transform: translate(-50%, 10px);
+                transform-origin: top center;
+                opacity: 0;
+                transition: opacity 0.18s ease, transform 0.18s ease;
+            }
+
+            .dtt-update-status-toast.is-visible {
+                opacity: 1;
+                transform: translate(-50%, 0);
+            }
+
+            .dtt-update-status-toast.is-anchored {
+                transform: translateY(10px);
+            }
+
+            .dtt-update-status-toast.is-anchored.is-visible {
+                transform: translateY(0);
+            }
+
+            .dtt-update-status-toast.is-success {
+                border: 1px solid rgba(30, 215, 96, 0.18);
+            }
+
+            .dtt-update-status-toast.is-error {
+                border: 1px solid rgba(239, 68, 68, 0.2);
+            }
+
+            .dtt-update-status-toast-text {
+                flex: 1;
+                color: #f3f3f3;
+                font-size: 13px;
+                font-weight: 600;
+                line-height: 1.35;
+                text-align: left;
+            }
+
+            .dtt-update-status-toast-close {
+                border: 0;
+                background: transparent;
+                color: #7f7f7f;
+                font-size: 13px;
+                cursor: pointer;
+                padding: 0;
+                line-height: 1;
+                transition: color 0.15s ease;
+            }
+
+            .dtt-update-status-toast-close:hover {
+                color: #ffffff;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -2333,11 +2947,13 @@
 
         wrap.hidden = false;
         const colors = getStreakColor();
+        const isStale = isStreakAwaitingRefresh();
         fireNode.innerHTML = createFireSvg(colors);
-        fireNode.classList.toggle("dtt-fire-glow", s >= 3);
+        fireNode.classList.toggle("is-stale", isStale);
+        fireNode.classList.toggle("dtt-fire-glow", !isStale && s >= 3);
         fireNode.style.setProperty("--dtt-fire-glow", colors.glow);
         countNode.textContent = String(s);
-        countNode.style.color = colors.text;
+        countNode.style.color = isStale ? "rgba(191, 191, 191, 0.96)" : colors.text;
     }
 
     function isUiUpdateSuspended() {
@@ -2361,7 +2977,7 @@
             return true;
         }
 
-        return state.silenceSeconds >= CONFIG.pauseSeconds;
+        return state.silenceSeconds >= state.pauseSeconds;
     }
 
     function getDailySummaryRows(todayTotalSeconds = getComputedDayTotalSeconds()) {
@@ -2377,6 +2993,49 @@
             .map(([date, entry]) => [date, normalizeHistoryEntry(entry)])
             .filter(([, entry]) => entry.totalSeconds > 0)
             .sort(([a], [b]) => b.localeCompare(a));
+    }
+
+    function getWeeklySummaryData(todayTotalSeconds = getComputedDayTotalSeconds()) {
+        const merged = {
+            ...readHistory(),
+            [state.day.date]: {
+                totalSeconds: todayTotalSeconds,
+                intervals: []
+            }
+        };
+
+        const days = [];
+        for (let offset = 6; offset >= 0; offset--) {
+            const date = shiftDateString(state.day.date, -offset);
+            const entry = normalizeHistoryEntry(merged[date]);
+            days.push({
+                date,
+                label: formatWeekdayLabel(date),
+                totalSeconds: entry.totalSeconds
+            });
+        }
+
+        const totalSeconds = days.reduce((sum, day) => sum + day.totalSeconds, 0);
+        const averageSeconds = Math.floor(totalSeconds / days.length);
+        let bestDay = null;
+
+        for (const day of days) {
+            if (!bestDay || day.totalSeconds > bestDay.totalSeconds) {
+                bestDay = day;
+            }
+        }
+
+        if (!bestDay || bestDay.totalSeconds <= 0) {
+            bestDay = null;
+        }
+
+        return {
+            days,
+            totalSeconds,
+            averageSeconds,
+            bestDay,
+            maxSeconds: Math.max(1, ...days.map((day) => day.totalSeconds))
+        };
     }
 
     function getTodayIntervalRows(now = Date.now()) {
@@ -2499,7 +3158,7 @@
         title.textContent = t("popupTitle");
 
         const headerRight = document.createElement("div");
-        headerRight.style.cssText = "display:flex;align-items:center;gap:8px;";
+        headerRight.className = "dtt-header-actions";
 
         const fireWrap = document.createElement("span");
         fireWrap.className = "dtt-fire-wrap";
@@ -2529,7 +3188,20 @@
             openSettings();
         });
 
-        headerRight.append(fireWrap, hint, gearBtn);
+        const weeklyToggleBtn = document.createElement("button");
+        weeklyToggleBtn.type = "button";
+        weeklyToggleBtn.className = "dtt-view-toggle";
+        weeklyToggleBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            state.popup.viewMode = state.popup.viewMode === "week" ? "today" : "week";
+            updatePopupStaticTextV2();
+            updatePopupDynamicContentV2();
+            updatePopupHistoryV2();
+            positionPopup();
+        });
+
+        headerRight.append(fireWrap, hint, weeklyToggleBtn, gearBtn);
 
         const titleWrap = document.createElement("div");
         titleWrap.style.cssText = "display:flex;align-items:center;gap:8px;min-width:0;";
@@ -2613,6 +3285,33 @@
         historySection.append(historyHeading, historyList);
         mainPanel.appendChild(historySection);
 
+        const weeklySection = document.createElement("div");
+        weeklySection.className = "dtt-popup-section dtt-weekly-section";
+        weeklySection.hidden = true;
+        const weeklyHeading = document.createElement("div");
+        weeklyHeading.className = "dtt-popup-section-title";
+        const weeklyStats = document.createElement("div");
+        weeklyStats.className = "dtt-weekly-stats";
+        const weeklyAverageCard = document.createElement("div");
+        weeklyAverageCard.className = "dtt-weekly-stat";
+        const weeklyAverageLabel = document.createElement("div");
+        weeklyAverageLabel.className = "dtt-weekly-stat-label";
+        const weeklyAverageValue = document.createElement("div");
+        weeklyAverageValue.className = "dtt-weekly-stat-value";
+        weeklyAverageCard.append(weeklyAverageLabel, weeklyAverageValue);
+        const weeklyBestDayCard = document.createElement("div");
+        weeklyBestDayCard.className = "dtt-weekly-stat";
+        const weeklyBestDayLabel = document.createElement("div");
+        weeklyBestDayLabel.className = "dtt-weekly-stat-label";
+        const weeklyBestDayValue = document.createElement("div");
+        weeklyBestDayValue.className = "dtt-weekly-stat-value";
+        weeklyBestDayCard.append(weeklyBestDayLabel, weeklyBestDayValue);
+        weeklyStats.append(weeklyAverageCard, weeklyBestDayCard);
+        const weeklyBars = document.createElement("div");
+        weeklyBars.className = "dtt-weekly-bars";
+        weeklySection.append(weeklyHeading, weeklyStats, weeklyBars);
+        mainPanel.appendChild(weeklySection);
+
         root.appendChild(mainPanel);
 
         // ── Settings panel ───────────────────────────────────
@@ -2657,6 +3356,83 @@
         langRow.append(langTitle, langContent);
         settingsPanel.appendChild(langRow);
 
+        const popupModeRow = document.createElement("div");
+        popupModeRow.className = "dtt-settings-row";
+        const popupModeTitle = document.createElement("div");
+        popupModeTitle.className = "dtt-settings-row-label";
+        popupModeTitle.textContent = t("popupModeLabel");
+        const popupModeContent = document.createElement("div");
+        popupModeContent.className = "dtt-settings-row-content";
+        const popupModeSwitcher = document.createElement("div");
+        popupModeSwitcher.className = "dtt-language-switcher";
+        state.popup.settingsPopupModeButtons = [];
+        const popupModeOptions = [
+            { mode: "compact", label: t("popupModeCompact") },
+            { mode: "full", label: t("popupModeFull") }
+        ];
+        for (const option of popupModeOptions) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `dtt-language-button${state.popupMode === option.mode ? " is-active" : ""}`;
+            button.textContent = option.label;
+            button.dataset.popupMode = option.mode;
+            button.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (state.popupMode === option.mode) return;
+                applyPopupMode(option.mode);
+                updatePopupStaticTextV2();
+                updatePopupDynamicContentV2();
+                updatePopupHistoryV2();
+                positionPopup();
+            });
+            popupModeSwitcher.appendChild(button);
+            state.popup.settingsPopupModeButtons.push(button);
+        }
+        const popupModeHint = document.createElement("div");
+        popupModeHint.className = "dtt-popup-mode-hint";
+        popupModeHint.textContent = t("popupModeHint");
+        popupModeContent.appendChild(popupModeSwitcher);
+        popupModeRow.append(popupModeTitle, popupModeContent, popupModeHint);
+        settingsPanel.appendChild(popupModeRow);
+
+        const pauseThresholdRow = document.createElement("div");
+        pauseThresholdRow.className = "dtt-settings-row";
+        const pauseThresholdTitle = document.createElement("div");
+        pauseThresholdTitle.className = "dtt-settings-row-label";
+        pauseThresholdTitle.textContent = t("pauseThresholdLabel");
+        const pauseThresholdContent = document.createElement("div");
+        pauseThresholdContent.className = "dtt-settings-row-content";
+        const pauseThresholdSwitcher = document.createElement("div");
+        pauseThresholdSwitcher.className = "dtt-language-switcher";
+        state.popup.settingsPauseThresholdButtons = [];
+        const pauseThresholdOptions = [15, 30, 60, 120];
+        for (const seconds of pauseThresholdOptions) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `dtt-language-button${state.pauseSeconds === seconds ? " is-active" : ""}`;
+            button.textContent = `${seconds}s`;
+            button.dataset.pauseSeconds = String(seconds);
+            button.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (state.pauseSeconds === seconds) return;
+                applyPauseSeconds(seconds);
+                updatePopupStaticTextV2();
+                updatePopupDynamicContentV2();
+                updatePopupHistoryV2();
+                positionPopup();
+            });
+            pauseThresholdSwitcher.appendChild(button);
+            state.popup.settingsPauseThresholdButtons.push(button);
+        }
+        const pauseThresholdHint = document.createElement("div");
+        pauseThresholdHint.className = "dtt-popup-mode-hint";
+        pauseThresholdHint.textContent = t("pauseThresholdHint");
+        pauseThresholdContent.appendChild(pauseThresholdSwitcher);
+        pauseThresholdRow.append(pauseThresholdTitle, pauseThresholdContent, pauseThresholdHint);
+        settingsPanel.appendChild(pauseThresholdRow);
+
         // Retention row
         const streakProgressionRow = document.createElement("div");
         streakProgressionRow.className = "dtt-settings-row";
@@ -2689,40 +3465,44 @@
         streakProgressionRow.append(streakProgressionTitle, streakProgressionContent, streakProgressionPreview);
         settingsPanel.appendChild(streakProgressionRow);
 
-        const carryOverRow = document.createElement("div");
-        carryOverRow.className = "dtt-settings-row";
-        const carryOverTitle = document.createElement("div");
-        carryOverTitle.className = "dtt-settings-row-label";
-        carryOverTitle.textContent = getCarryOverTimerLabel();
-        const carryOverContent = document.createElement("div");
-        carryOverContent.className = "dtt-settings-row-content is-between";
-        carryOverContent.title = getCarryOverTimerDisabledTooltip();
-        const carryOverHint = document.createElement("div");
-        carryOverHint.className = "dtt-settings-row-hint";
-        carryOverHint.textContent = getCarryOverTimerHint();
-        carryOverHint.title = getCarryOverTimerDisabledTooltip();
-        const carryOverInput = document.createElement("input");
-        carryOverInput.type = "checkbox";
-        carryOverInput.className = "dtt-settings-checkbox";
-        carryOverInput.checked = false;
-        carryOverInput.title = getCarryOverTimerDisabledTooltip();
-        carryOverInput.setAttribute("aria-disabled", "true");
-        carryOverInput.style.opacity = "0.55";
-        carryOverInput.style.cursor = "not-allowed";
-        carryOverInput.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            carryOverInput.checked = false;
-        });
-        carryOverInput.addEventListener("change", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            event.target.checked = false;
-        });
+        const streakShieldsRow = document.createElement("div");
+        streakShieldsRow.className = "dtt-settings-row";
+        const streakShieldsTitle = document.createElement("div");
+        streakShieldsTitle.className = "dtt-settings-row-label";
+        streakShieldsTitle.textContent = t("streakShieldsLabel");
+        const streakShieldsHint = document.createElement("div");
+        streakShieldsHint.className = "dtt-settings-row-hint";
+        streakShieldsRow.append(streakShieldsTitle, streakShieldsHint);
+        settingsPanel.appendChild(streakShieldsRow);
 
-        carryOverContent.append(carryOverHint, carryOverInput);
-        carryOverRow.append(carryOverTitle, carryOverContent);
-        settingsPanel.appendChild(carryOverRow);
+        const keepStreakRow = document.createElement("div");
+        keepStreakRow.className = "dtt-settings-row";
+        const keepStreakTitle = document.createElement("div");
+        keepStreakTitle.className = "dtt-settings-row-label";
+        keepStreakTitle.textContent = t("keepStreakLabel");
+        const keepStreakContent = document.createElement("div");
+        keepStreakContent.className = "dtt-settings-row-content is-between";
+        const keepStreakHint = document.createElement("div");
+        keepStreakHint.className = "dtt-settings-row-hint";
+        const keepStreakInput = document.createElement("input");
+        keepStreakInput.type = "checkbox";
+        keepStreakInput.className = "dtt-settings-checkbox";
+        keepStreakInput.checked = state.streakControl.keepStreakEnabled;
+        keepStreakInput.addEventListener("click", (event) => event.stopPropagation());
+        keepStreakInput.addEventListener("change", (event) => {
+            event.stopPropagation();
+            applyKeepStreakEnabled(event.target.checked);
+            updatePopupStaticTextV2();
+            updatePopupDynamicContentV2();
+            updatePopupHistoryV2();
+            updatePopupFireIcon();
+            positionPopup();
+        });
+        keepStreakContent.append(keepStreakHint, keepStreakInput);
+        const keepStreakPreview = document.createElement("div");
+        keepStreakPreview.className = "dtt-settings-row-hint";
+        keepStreakRow.append(keepStreakTitle, keepStreakContent, keepStreakPreview);
+        settingsPanel.appendChild(keepStreakRow);
 
         const retRow = document.createElement("div");
         retRow.className = "dtt-settings-row";
@@ -2860,7 +3640,7 @@
         updateCheckBtn.addEventListener("click", async (event) => {
             event.preventDefault();
             event.stopPropagation();
-            await checkForUpdates({ manual: true });
+            await checkForUpdates({ manual: true, anchorEl: event.currentTarget });
         });
 
         updateActions.append(updateCheckBtn);
@@ -2922,28 +3702,55 @@
         resetRow.append(resetTitle, resetHint, resetActions);
         settingsPanel.appendChild(resetRow);
 
+        const versionText = document.createElement("button");
+        versionText.type = "button";
+        versionText.className = "dtt-settings-version";
+        versionText.addEventListener("click", async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            await checkForUpdates({ manual: true, anchorEl: event.currentTarget });
+        });
+        settingsPanel.appendChild(versionText);
+
         root.appendChild(settingsPanel);
 
         // ── Save node refs ───────────────────────────────────
         state.popup.titleNode = title;
+        state.popup.viewToggleNode = weeklyToggleBtn;
         state.popup.hintNode = hint;
         state.popup.summaryDateNode = dateNode;
         state.popup.summaryTotalNode = totalNode;
+        state.popup.intervalsSectionNode = intervalsSection;
         state.popup.sessionsTitleNode = intervalsTitle;
         state.popup.intervalsListNode = intervalsList;
         state.popup.todaySessionsToggleNode = todaySessionsToggle;
+        state.popup.historySectionNode = historySection;
         state.popup.historyTitleNode = historyTitle;
         state.popup.historyListNode = historyList;
         state.popup.historyToggleNode = historyToggle;
+        state.popup.weeklySectionNode = weeklySection;
+        state.popup.weeklySectionTitleNode = weeklyHeading;
+        state.popup.weeklyAverageLabelNode = weeklyAverageLabel;
+        state.popup.weeklyAverageValueNode = weeklyAverageValue;
+        state.popup.weeklyBestDayLabelNode = weeklyBestDayLabel;
+        state.popup.weeklyBestDayValueNode = weeklyBestDayValue;
+        state.popup.weeklyBarsNode = weeklyBars;
         state.popup.retentionLabelNode = retTitle;
         state.popup.retentionSuffixNode = retSuffix;
         state.popup.settingsGearNode = gearBtn;
         state.popup.settingsPanelNode = settingsPanel;
         state.popup.settingsLangTitleNode = langTitle;
+        state.popup.settingsPopupModeTitleNode = popupModeTitle;
+        state.popup.settingsPopupModeHintNode = popupModeHint;
+        state.popup.settingsPauseThresholdTitleNode = pauseThresholdTitle;
+        state.popup.settingsPauseThresholdHintNode = pauseThresholdHint;
         state.popup.settingsRetentionTitleNode = retTitle;
-        state.popup.settingsCarryOverTitleNode = carryOverTitle;
-        state.popup.settingsCarryOverHintNode = carryOverHint;
-        state.popup.settingsCarryOverInputNode = carryOverInput;
+        state.popup.settingsStreakShieldsTitleNode = streakShieldsTitle;
+        state.popup.settingsStreakShieldsHintNode = streakShieldsHint;
+        state.popup.settingsKeepStreakTitleNode = keepStreakTitle;
+        state.popup.settingsKeepStreakHintNode = keepStreakHint;
+        state.popup.settingsKeepStreakInputNode = keepStreakInput;
+        state.popup.settingsKeepStreakPreviewNode = keepStreakPreview;
         state.popup.settingsStreakProgressionTitleNode = streakProgressionTitle;
         state.popup.settingsStreakProgressionHintNode = streakProgressionHint;
         state.popup.settingsStreakProgressionInputNode = streakProgressionInput;
@@ -2964,6 +3771,7 @@
         state.popup.resetTodayBtnNode = resetTodayBtn;
         state.popup.clearHistoryBtnNode = clearHistoryBtn;
         state.popup.fullWipeBtnNode = fullWipeBtn;
+        state.popup.settingsVersionNode = versionText;
         state.popup.popupFireNode = fireIconEl;
         state.popup.popupStreakCountNode = fireCount;
         state.popup.lastHistorySignature = "";
@@ -2975,6 +3783,7 @@
         updatePopupDynamicContentV2();
         updatePopupHistoryV2();
         updatePopupFireIcon();
+        updateStreakProtectionUi();
     }
 
     function openSettings() {
@@ -2984,6 +3793,9 @@
         if (state.popup.titleNode) state.popup.titleNode.textContent = t("settingsTitle");
         if (state.popup.settingsGearNode) {
             state.popup.settingsGearNode.style.display = "none";
+        }
+        if (state.popup.viewToggleNode) {
+            state.popup.viewToggleNode.style.display = "none";
         }
         // Show back button if not already created
         if (!state.popup.settingsBackNode) {
@@ -3014,6 +3826,7 @@
         state.popup.node.classList.remove("dtt-settings-open");
         if (state.popup.titleNode) state.popup.titleNode.textContent = t("popupTitle");
         if (state.popup.settingsGearNode) state.popup.settingsGearNode.style.display = "";
+        if (state.popup.viewToggleNode) state.popup.viewToggleNode.style.display = "";
         if (state.popup.settingsBackNode) state.popup.settingsBackNode.style.display = "none";
         positionPopup();
     }
@@ -3055,15 +3868,33 @@
             .join("|");
     }
 
+    function syncPopupModeClass() {
+        if (!state.popup.node) {
+            return;
+        }
+
+        state.popup.node.classList.toggle("dtt-popup-mode-compact", !isFullPopupMode());
+        state.popup.node.classList.toggle("dtt-popup-mode-full", isFullPopupMode());
+    }
+
     function updatePopupStaticTextV2() {
         if (!state.popup.node) {
             return;
         }
 
+        syncPopupModeClass();
+
+        const isWeekMode = state.popup.viewMode === "week";
+
         if (state.popup.titleNode) {
             state.popup.titleNode.textContent = state.popup.settingsOpen
                 ? t("settingsTitle")
                 : t("popupTitle");
+        }
+        if (state.popup.viewToggleNode) {
+            state.popup.viewToggleNode.textContent = t("weeklyToggle");
+            state.popup.viewToggleNode.title = t("weeklyToggleTitle");
+            state.popup.viewToggleNode.classList.toggle("is-active", isWeekMode);
         }
         if (state.popup.hintNode) {
             state.popup.hintNode.textContent = state.popup.isPinned ? t("popupHintPinned") : t("popupHintHover");
@@ -3074,23 +3905,33 @@
         if (state.popup.historyTitleNode) {
             state.popup.historyTitleNode.textContent = t("historyTitle");
         }
+        if (state.popup.weeklySectionTitleNode) {
+            state.popup.weeklySectionTitleNode.textContent = t("weeklySummaryTitle");
+        }
+        if (state.popup.weeklyAverageLabelNode) {
+            state.popup.weeklyAverageLabelNode.textContent = t("weeklyAverageLabel");
+        }
+        if (state.popup.weeklyBestDayLabelNode) {
+            state.popup.weeklyBestDayLabelNode.textContent = t("weeklyBestDayLabel");
+        }
         if (state.popup.settingsLangTitleNode) {
             state.popup.settingsLangTitleNode.textContent = t("languageLabel");
         }
+        if (state.popup.settingsPopupModeTitleNode) {
+            state.popup.settingsPopupModeTitleNode.textContent = t("popupModeLabel");
+        }
+        if (state.popup.settingsPopupModeHintNode) {
+            state.popup.settingsPopupModeHintNode.textContent = t("popupModeHint");
+        }
+        if (state.popup.settingsPauseThresholdTitleNode) {
+            state.popup.settingsPauseThresholdTitleNode.textContent = t("pauseThresholdLabel");
+        }
+        if (state.popup.settingsPauseThresholdHintNode) {
+            state.popup.settingsPauseThresholdHintNode.textContent = t("pauseThresholdHint");
+        }
+        updateStreakProtectionUi();
         if (state.popup.settingsRetentionTitleNode) {
             state.popup.settingsRetentionTitleNode.textContent = t("retentionLabel");
-        }
-        if (state.popup.settingsCarryOverTitleNode) {
-            state.popup.settingsCarryOverTitleNode.textContent = getCarryOverTimerLabel();
-            state.popup.settingsCarryOverTitleNode.title = getCarryOverTimerDisabledTooltip();
-        }
-        if (state.popup.settingsCarryOverHintNode) {
-            state.popup.settingsCarryOverHintNode.textContent = getCarryOverTimerHint();
-            state.popup.settingsCarryOverHintNode.title = getCarryOverTimerDisabledTooltip();
-        }
-        if (state.popup.settingsCarryOverInputNode) {
-            state.popup.settingsCarryOverInputNode.checked = false;
-            state.popup.settingsCarryOverInputNode.title = getCarryOverTimerDisabledTooltip();
         }
         if (state.popup.settingsStreakProgressionTitleNode) {
             state.popup.settingsStreakProgressionTitleNode.textContent = t("streakProgressionLabel");
@@ -3152,6 +3993,10 @@
         if (state.popup.fullWipeBtnNode) {
             state.popup.fullWipeBtnNode.textContent = t("fullWipe");
         }
+        if (state.popup.settingsVersionNode) {
+            state.popup.settingsVersionNode.textContent = `Version: ${VERSION}`;
+            state.popup.settingsVersionNode.title = t("updateCheckButton");
+        }
         if (state.popup.settingsGearNode) {
             state.popup.settingsGearNode.title = t("settingsTitle");
         }
@@ -3162,6 +4007,16 @@
         }
         for (const button of state.popup.languageButtons ?? []) {
             button.classList.toggle("is-active", button.dataset.lang === state.language);
+        }
+        for (const button of state.popup.settingsPopupModeButtons ?? []) {
+            button.classList.toggle("is-active", button.dataset.popupMode === state.popupMode);
+            button.textContent = button.dataset.popupMode === "full" ? t("popupModeFull") : t("popupModeCompact");
+        }
+        for (const button of state.popup.settingsPauseThresholdButtons ?? []) {
+            button.classList.toggle("is-active", Number(button.dataset.pauseSeconds) === state.pauseSeconds);
+        }
+        if (state.popup.viewToggleNode) {
+            state.popup.viewToggleNode.hidden = !isFullPopupMode();
         }
         state.popup.lastLanguage = state.language;
     }
@@ -3174,15 +4029,20 @@
         const now = options.now ?? Date.now();
         const totalSeconds = options.totalSeconds ?? getComputedDayTotalSeconds(now);
         const todayIntervalRows = options.todayIntervalRows ?? getTodayIntervalRows(now);
+        const isWeekMode = state.popup.viewMode === "week";
+        const weeklySummary = getWeeklySummaryData(totalSeconds);
 
         if (state.popup.hintNode) {
             state.popup.hintNode.textContent = state.popup.isPinned ? t("popupHintPinned") : t("popupHintHover");
         }
         if (state.popup.summaryDateNode) {
-            state.popup.summaryDateNode.textContent = state.day.date;
+            state.popup.summaryDateNode.textContent = isWeekMode ? t("weeklyRangeLabel") : state.day.date;
         }
         if (state.popup.summaryTotalNode) {
-            state.popup.summaryTotalNode.textContent = formatDuration(totalSeconds);
+            state.popup.summaryTotalNode.textContent = formatDuration(isWeekMode ? weeklySummary.totalSeconds : totalSeconds);
+        }
+        if (state.popup.intervalsSectionNode) {
+            state.popup.intervalsSectionNode.hidden = isWeekMode;
         }
         if (state.popup.intervalsListNode) {
             renderRows(
@@ -3193,7 +4053,48 @@
                 }))
             );
         }
+        if (state.popup.historySectionNode) {
+            state.popup.historySectionNode.hidden = isWeekMode;
+        }
+        if (state.popup.weeklySectionNode) {
+            state.popup.weeklySectionNode.hidden = !isWeekMode;
+        }
+        if (state.popup.weeklyAverageValueNode) {
+            state.popup.weeklyAverageValueNode.textContent = formatDuration(weeklySummary.averageSeconds);
+        }
+        if (state.popup.weeklyBestDayValueNode) {
+            state.popup.weeklyBestDayValueNode.textContent = weeklySummary.bestDay
+                ? `${weeklySummary.bestDay.label} • ${formatDuration(weeklySummary.bestDay.totalSeconds)}`
+                : t("weeklyBestDayEmpty");
+        }
+        if (state.popup.weeklyBarsNode) {
+            state.popup.weeklyBarsNode.innerHTML = "";
+            for (const day of weeklySummary.days) {
+                const barItem = document.createElement("div");
+                barItem.className = "dtt-weekly-bar-item";
+                barItem.title = `${day.date}: ${formatDuration(day.totalSeconds)}`;
+
+                const track = document.createElement("div");
+                track.className = "dtt-weekly-bar-track";
+
+                const fill = document.createElement("div");
+                fill.className = "dtt-weekly-bar-fill";
+                const heightPercent = day.totalSeconds <= 0
+                    ? 0
+                    : Math.max(6, Math.round((day.totalSeconds / weeklySummary.maxSeconds) * 100));
+                fill.style.height = `${heightPercent}%`;
+
+                const label = document.createElement("div");
+                label.className = "dtt-weekly-bar-label";
+                label.textContent = day.label;
+
+                track.appendChild(fill);
+                barItem.append(track, label);
+                state.popup.weeklyBarsNode.appendChild(barItem);
+            }
+        }
         updateTodaySessionsToggle(todayIntervalRows);
+        updateStreakProtectionUi();
     }
 
     function updatePopupHistoryV2(dailySummaryRows = getDailySummaryRows()) {
@@ -3201,7 +4102,7 @@
             return;
         }
 
-        const historySignature = `${state.language}|${createHistorySignature(dailySummaryRows)}|${state.popup.historyExpanded ? "1" : "0"}`;
+        const historySignature = `${state.language}|${state.popupMode}|${createHistorySignature(dailySummaryRows)}|${state.popup.historyExpanded ? "1" : "0"}`;
         if (historySignature === state.popup.lastHistorySignature) {
             return;
         }
@@ -3283,20 +4184,31 @@
             return;
         }
 
+        hideUpdateStatusToast();
         popupNode.classList.remove("dtt-visible");
         state.popup.node = null;
+        state.popup.viewToggleNode = null;
         state.popup.titleNode = null;
         state.popup.hintNode = null;
         state.popup.summaryDateNode = null;
         state.popup.summaryTotalNode = null;
+        state.popup.intervalsSectionNode = null;
         state.popup.sessionsTitleNode = null;
         state.popup.intervalsListNode = null;
         state.popup.todaySessionsToggleNode = null;
         state.popup.todaySessionsExpanded = false;
+        state.popup.historySectionNode = null;
         state.popup.historyTitleNode = null;
         state.popup.historyListNode = null;
         state.popup.historyToggleNode = null;
         state.popup.historyExpanded = false;
+        state.popup.weeklySectionNode = null;
+        state.popup.weeklySectionTitleNode = null;
+        state.popup.weeklyAverageLabelNode = null;
+        state.popup.weeklyAverageValueNode = null;
+        state.popup.weeklyBestDayLabelNode = null;
+        state.popup.weeklyBestDayValueNode = null;
+        state.popup.weeklyBarsNode = null;
         state.popup.lastHistorySignature = "";
         state.popup.lastHeight = 0;
         state.popup.lastLanguage = null;
@@ -3308,10 +4220,19 @@
         state.popup.settingsBackNode = null;
         state.popup.settingsPanelNode = null;
         state.popup.settingsLangTitleNode = null;
+        state.popup.settingsPopupModeTitleNode = null;
+        state.popup.settingsPopupModeHintNode = null;
+        state.popup.settingsPopupModeButtons = [];
+        state.popup.settingsPauseThresholdTitleNode = null;
+        state.popup.settingsPauseThresholdHintNode = null;
+        state.popup.settingsPauseThresholdButtons = [];
+        state.popup.settingsStreakShieldsTitleNode = null;
+        state.popup.settingsStreakShieldsHintNode = null;
+        state.popup.settingsKeepStreakTitleNode = null;
+        state.popup.settingsKeepStreakHintNode = null;
+        state.popup.settingsKeepStreakInputNode = null;
+        state.popup.settingsKeepStreakPreviewNode = null;
         state.popup.settingsRetentionTitleNode = null;
-        state.popup.settingsCarryOverTitleNode = null;
-        state.popup.settingsCarryOverHintNode = null;
-        state.popup.settingsCarryOverInputNode = null;
         state.popup.settingsStreakProgressionTitleNode = null;
         state.popup.settingsStreakProgressionHintNode = null;
         state.popup.settingsStreakProgressionInputNode = null;
@@ -3332,6 +4253,7 @@
         state.popup.resetTodayBtnNode = null;
         state.popup.clearHistoryBtnNode = null;
         state.popup.fullWipeBtnNode = null;
+        state.popup.settingsVersionNode = null;
         state.popup.popupFireNode = null;
         state.popup.popupStreakCountNode = null;
 
@@ -3523,13 +4445,13 @@
 
         state.silenceSeconds = Math.floor((now - state.idleStartedAt) / 1000);
 
-        if (state.silenceSeconds < CONFIG.pauseSeconds) {
+        if (state.silenceSeconds < state.pauseSeconds) {
             setWidgetPausedState(false);
             return;
         }
 
         setWidgetPausedState(true);
-        closeSession(state.idleStartedAt + CONFIG.pauseSeconds * 1000);
+        closeSession(state.idleStartedAt + state.pauseSeconds * 1000);
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
         saveTodayData(now);
@@ -3548,11 +4470,7 @@
         }
 
         const totalSeconds = getComputedDayTotalSeconds(now);
-        updateWidgetUI(
-            state.carryOverTimerEnabled
-                ? state.widgetCarryoverSeconds + totalSeconds
-                : totalSeconds
-        );
+        updateWidgetUI(totalSeconds);
         setWidgetPausedState(shouldWidgetBePaused(), true);
         if (!state.runtime._streakTestMode) {
             computeStreak();
@@ -3632,6 +4550,7 @@
             state.runtime.apiHealthCheckIntervalId = null;
         }
         hideUpdateModal();
+        hideUpdateStatusToast();
         hideApiUnavailableModal();
         state.runtime.injectObserver?.disconnect?.();
         state.runtime.injectObserver = null;
@@ -3646,16 +4565,26 @@
         state.popup.node = null;
         state.popup.hintNode = null;
         state.popup.titleNode = null;
+        state.popup.viewToggleNode = null;
         state.popup.summaryDateNode = null;
         state.popup.summaryTotalNode = null;
+        state.popup.intervalsSectionNode = null;
         state.popup.sessionsTitleNode = null;
         state.popup.intervalsListNode = null;
         state.popup.todaySessionsToggleNode = null;
         state.popup.todaySessionsExpanded = false;
+        state.popup.historySectionNode = null;
         state.popup.historyTitleNode = null;
         state.popup.historyListNode = null;
         state.popup.historyToggleNode = null;
         state.popup.historyExpanded = false;
+        state.popup.weeklySectionNode = null;
+        state.popup.weeklySectionTitleNode = null;
+        state.popup.weeklyAverageLabelNode = null;
+        state.popup.weeklyAverageValueNode = null;
+        state.popup.weeklyBestDayLabelNode = null;
+        state.popup.weeklyBestDayValueNode = null;
+        state.popup.weeklyBarsNode = null;
         state.popup.lastHistorySignature = "";
         state.popup.lastHeight = 0;
         state.popup.lastLanguage = null;
@@ -3666,10 +4595,19 @@
         state.popup.settingsBackNode = null;
         state.popup.settingsPanelNode = null;
         state.popup.settingsLangTitleNode = null;
+        state.popup.settingsPopupModeTitleNode = null;
+        state.popup.settingsPopupModeHintNode = null;
+        state.popup.settingsPopupModeButtons = [];
+        state.popup.settingsPauseThresholdTitleNode = null;
+        state.popup.settingsPauseThresholdHintNode = null;
+        state.popup.settingsPauseThresholdButtons = [];
+        state.popup.settingsStreakShieldsTitleNode = null;
+        state.popup.settingsStreakShieldsHintNode = null;
+        state.popup.settingsKeepStreakTitleNode = null;
+        state.popup.settingsKeepStreakHintNode = null;
+        state.popup.settingsKeepStreakInputNode = null;
+        state.popup.settingsKeepStreakPreviewNode = null;
         state.popup.settingsRetentionTitleNode = null;
-        state.popup.settingsCarryOverTitleNode = null;
-        state.popup.settingsCarryOverHintNode = null;
-        state.popup.settingsCarryOverInputNode = null;
         state.popup.settingsStreakProgressionTitleNode = null;
         state.popup.settingsStreakProgressionHintNode = null;
         state.popup.settingsStreakProgressionInputNode = null;
@@ -3690,6 +4628,7 @@
         state.popup.resetTodayBtnNode = null;
         state.popup.clearHistoryBtnNode = null;
         state.popup.fullWipeBtnNode = null;
+        state.popup.settingsVersionNode = null;
         state.popup.popupFireNode = null;
         state.popup.popupStreakCountNode = null;
         if (state.ui.resizeHandler) {
