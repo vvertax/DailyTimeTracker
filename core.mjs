@@ -9,7 +9,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         : "release";
     const runtimeConfig = {
         channel: normalizedRuntimeChannel,
-        version: typeof runtimeOverrides.version === "string" ? runtimeOverrides.version : "2.0.0",
+        version: typeof runtimeOverrides.version === "string" ? runtimeOverrides.version : "2.0.1",
         versionCheckUrl: typeof runtimeOverrides.versionCheckUrl === "string"
             ? runtimeOverrides.versionCheckUrl
             : "https://vvertax.site/dtt/ext/version.json",
@@ -63,6 +63,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         badgeApiBaseUrl: runtimeConfig.badgeApiBaseUrl,
         devChannelApiBaseUrl: runtimeConfig.devChannelApiBaseUrl,
         apiHealthCheckIntervalMs: 300000,
+        devChannelRetryMs: 800,
         streakThresholdSeconds: 300,
         streakShieldsPerMonth: 4,
         historyRetentionMonths: 1,
@@ -226,6 +227,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             intervalId: null,
             injectObserver: null,
             injectRetryTimeoutId: null,
+            devChannelRetryTimeoutId: null,
             updateCheckIntervalId: null,
             apiHealthCheckIntervalId: null,
             _streakTestMode: false,
@@ -342,6 +344,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             retentionForeverHint: "Disables automatic archive pruning.",
             retentionForeverValue: "Forever",
             retentionForeverWarning: "Enable Forever mode? History will stop pruning automatically and may use much more LocalStorage over time.",
+            toggleOn: "ON",
+            toggleOff: "OFF",
             settingsTitle: "Settings",
             settingsBack: "Back",
             languageLabel: "Language",
@@ -937,12 +941,16 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
     function getTestChannelWarningText() {
         const channelName = CHANNEL === "dev" ? "Dev" : "Test";
+        const isDev = CHANNEL === "dev";
         if (state.language === "en") {
             return {
                 badge: `${channelName.toUpperCase()} VERSION`,
                 title: `You are using the ${channelName.toLowerCase()} version`,
                 subtitle: "This build may contain bugs, unfinished changes, or unstable behavior. Use it only if you are ready to test new features.",
-                button: "Continue"
+                button: "Continue",
+                badgeColor: isDev ? "#ef4444" : "#f59e0b",
+                badgeBorder: isDev ? "rgba(239, 68, 68, 0.4)" : "rgba(245, 158, 11, 0.4)",
+                badgeBackground: isDev ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)"
             };
         }
 
@@ -950,7 +958,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             badge: `${channelName.toUpperCase()} \u0412\u0415\u0420\u0421\u0418\u042f`,
             title: `\u0412\u044b \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u0442\u0435 ${channelName} \u0432\u0435\u0440\u0441\u0438\u044e`,
             subtitle: "\u0412 \u044d\u0442\u043e\u0439 \u0441\u0431\u043e\u0440\u043a\u0435 \u043c\u043e\u0433\u0443\u0442 \u0431\u044b\u0442\u044c \u0431\u0430\u0433\u0438, \u043d\u0435\u0434\u043e\u0434\u0435\u043b\u0430\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u0438\u043b\u0438 \u043d\u0435\u0441\u0442\u0430\u0431\u0438\u043b\u044c\u043d\u043e\u0435 \u043f\u043e\u0432\u0435\u0434\u0435\u043d\u0438\u0435. \u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0439\u0442\u0435 \u0435\u0435, \u0435\u0441\u043b\u0438 \u0433\u043e\u0442\u043e\u0432\u044b \u0442\u0435\u0441\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043d\u043e\u0432\u044b\u0435 \u0444\u0443\u043d\u043a\u0446\u0438\u0438.",
-            button: "\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c"
+            button: "\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c",
+            badgeColor: isDev ? "#ef4444" : "#f59e0b",
+            badgeBorder: isDev ? "rgba(239, 68, 68, 0.4)" : "rgba(245, 158, 11, 0.4)",
+            badgeBackground: isDev ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)"
         };
     }
 
@@ -1050,9 +1061,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             font-weight: 800;
             letter-spacing: 0.1em;
             text-transform: uppercase;
-            color: #f59e0b;
-            border: 1px solid rgba(245, 158, 11, 0.4);
-            background: rgba(245, 158, 11, 0.1);
+            color: ${text.badgeColor};
+            border: 1px solid ${text.badgeBorder};
+            background: ${text.badgeBackground};
             margin-bottom: 16px;
         `;
 
@@ -1337,6 +1348,29 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         return `${remaining}/${CONFIG.streakShieldsPerMonth}`;
     }
 
+    function setSettingsToggleButtonState(button, isActive) {
+        if (!button) {
+            return;
+        }
+
+        button.classList.toggle("is-active", Boolean(isActive));
+        button.setAttribute("aria-pressed", String(Boolean(isActive)));
+        const text = isActive ? (t("toggleOn") || "ON") : (t("toggleOff") || "OFF");
+        button.textContent = "";
+        button.setAttribute("aria-label", text);
+        button.title = text;
+    }
+
+    function setRetentionForeverButtonState(button, isActive) {
+        if (!button) {
+            return;
+        }
+
+        button.classList.toggle("is-active", Boolean(isActive));
+        button.setAttribute("aria-pressed", String(Boolean(isActive)));
+        button.textContent = t("retentionForeverValue");
+    }
+
     function isStreakAwaitingRefresh(now = Date.now()) {
         if (state.runtime._streakTestMode || state.streak.current < 2) {
             return false;
@@ -1364,7 +1398,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.settingsKeepStreakHintNode.textContent = `${t("keepStreakHint")}${suffix}`;
         }
         if (state.popup.settingsKeepStreakInputNode) {
-            state.popup.settingsKeepStreakInputNode.checked = state.streakControl.keepStreakEnabled;
+            setSettingsToggleButtonState(
+                state.popup.settingsKeepStreakInputNode,
+                state.streakControl.keepStreakEnabled
+            );
         }
         if (state.popup.settingsKeepStreakPreviewNode) {
             state.popup.settingsKeepStreakPreviewNode.textContent = `${t("streakShieldsRemaining")}: ${getRemainingStreakShieldsText()}`;
@@ -1391,7 +1428,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         try {
             const uid = Spicetify.Platform?.username;
             if (!uid) {
-                state.devChannelAvailable = false;
+                if (state.runtime.devChannelRetryTimeoutId === null) {
+                    state.runtime.devChannelRetryTimeoutId = setTimeout(() => {
+                        state.runtime.devChannelRetryTimeoutId = null;
+                        fetchDevChannelAccess();
+                    }, CONFIG.devChannelRetryMs);
+                }
                 return;
             }
 
@@ -2611,8 +2653,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             }
 
             .dtt-language-button {
-                border: 0;
-                background: transparent;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(255, 255, 255, 0.03);
                 color: #737373;
                 padding: 3px 9px;
                 font: inherit;
@@ -2621,17 +2663,47 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 letter-spacing: 0.04em;
                 cursor: pointer;
                 border-radius: 999px;
-                transition: background 0.15s ease, color 0.15s ease;
+                transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+            }
+
+            .dtt-language-switcher .dtt-language-button {
+                border: 0;
+                background: transparent;
+                box-shadow: none;
+            }
+
+            .dtt-language-switcher .dtt-language-button:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+
+            .dtt-language-switcher .dtt-language-button.is-active {
+                background: #1ed760;
             }
 
             .dtt-language-button:hover {
                 color: #e0e0e0;
                 background: rgba(255, 255, 255, 0.07);
+                border-color: rgba(255, 255, 255, 0.24);
             }
 
             .dtt-language-button.is-active {
                 background: #1ed760;
+                border-color: rgba(30, 215, 96, 0.7);
                 color: #000;
+            }
+
+            .dtt-settings-pill-button {
+                border-color: rgba(255, 255, 255, 0.2);
+                box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+            }
+
+            .dtt-settings-pill-button:hover {
+                border-color: rgba(255, 255, 255, 0.32);
+                box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+            }
+
+            .dtt-settings-pill-button.is-active {
+                box-shadow: 0 0 0 1px rgba(30, 215, 96, 0.16);
             }
 
             .dtt-popup-mode-hint {
@@ -3297,6 +3369,61 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 flex-shrink: 0;
             }
 
+            .dtt-settings-toggle-button {
+                position: relative;
+                width: 34px;
+                min-width: 34px;
+                height: 20px;
+                padding: 0;
+                border-radius: 999px;
+                border: 1px solid rgba(255, 255, 255, 0.34);
+                background: rgba(255, 255, 255, 0.1);
+                box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 6px 14px rgba(0, 0, 0, 0.18);
+                justify-content: center;
+                letter-spacing: 0;
+                color: transparent;
+                align-self: center;
+                flex-shrink: 0;
+                transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+            }
+
+            .dtt-settings-toggle-button::before {
+                content: "";
+                position: absolute;
+                top: 2px;
+                left: 2px;
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                background: linear-gradient(180deg, #ffffff 0%, #f3f3f3 100%);
+                border: 1px solid rgba(0, 0, 0, 0.08);
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22), 0 4px 10px rgba(0, 0, 0, 0.16);
+                transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+
+            .dtt-settings-toggle-button:hover {
+                background: rgba(255, 255, 255, 0.14);
+                border-color: rgba(255, 255, 255, 0.48);
+                box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 6px 14px rgba(0, 0, 0, 0.18);
+                color: transparent;
+            }
+
+            .dtt-settings-toggle-button.is-active {
+                background: #32d73a;
+                border-color: rgba(30, 215, 96, 0.8);
+                box-shadow: 0 0 0 1px rgba(30, 215, 96, 0.16), 0 6px 14px rgba(0, 0, 0, 0.18);
+                color: transparent;
+            }
+
+            .dtt-settings-toggle-button.is-active::before {
+                transform: translateX(14px);
+            }
+
+            .dtt-settings-toggle-button:focus-visible {
+                outline: 2px solid rgba(255, 255, 255, 0.32);
+                outline-offset: 2px;
+            }
+
             .dtt-settings-actions {
                 display: flex;
                 flex-wrap: wrap;
@@ -3897,6 +4024,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         const hint = document.createElement("div");
         hint.className = "dtt-popup-hint";
+        hint.style.display = "none";
 
         const gearBtn = document.createElement("button");
         gearBtn.type = "button";
@@ -4180,14 +4308,15 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const badgeHint = document.createElement("div");
         badgeHint.className = "dtt-settings-row-hint";
         badgeHint.textContent = t("badgeVisibilityHint");
-        const badgeInput = document.createElement("input");
-        badgeInput.type = "checkbox";
-        badgeInput.className = "dtt-settings-checkbox";
-        badgeInput.checked = state.badgeVisible;
-        badgeInput.addEventListener("click", (event) => event.stopPropagation());
-        badgeInput.addEventListener("change", (event) => {
+        const badgeInput = document.createElement("button");
+        badgeInput.type = "button";
+        badgeInput.className = "dtt-language-button dtt-settings-toggle-button";
+        setSettingsToggleButtonState(badgeInput, state.badgeVisible);
+        badgeInput.addEventListener("click", (event) => {
+            event.preventDefault();
             event.stopPropagation();
-            applyBadgeVisibility(event.target.checked);
+            applyBadgeVisibility(!state.badgeVisible);
+            setSettingsToggleButtonState(badgeInput, state.badgeVisible);
         });
         badgeContent.append(badgeHint, badgeInput);
         badgeRow.append(badgeTitle, badgeContent);
@@ -4281,14 +4410,15 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const streakProgressionHint = document.createElement("div");
         streakProgressionHint.className = "dtt-settings-row-hint";
         streakProgressionHint.textContent = t("streakProgressionHint");
-        const streakProgressionInput = document.createElement("input");
-        streakProgressionInput.type = "checkbox";
-        streakProgressionInput.className = "dtt-settings-checkbox";
-        streakProgressionInput.checked = state.longStreakProgressionEnabled;
-        streakProgressionInput.addEventListener("click", (event) => event.stopPropagation());
-        streakProgressionInput.addEventListener("change", (event) => {
+        const streakProgressionInput = document.createElement("button");
+        streakProgressionInput.type = "button";
+        streakProgressionInput.className = "dtt-language-button dtt-settings-toggle-button";
+        setSettingsToggleButtonState(streakProgressionInput, state.longStreakProgressionEnabled);
+        streakProgressionInput.addEventListener("click", (event) => {
+            event.preventDefault();
             event.stopPropagation();
-            applyLongStreakProgressionEnabled(event.target.checked);
+            applyLongStreakProgressionEnabled(!state.longStreakProgressionEnabled);
+            setSettingsToggleButtonState(streakProgressionInput, state.longStreakProgressionEnabled);
             updatePopupStaticTextV2();
             updatePopupFireIcon();
             syncVisibleUI();
@@ -4321,14 +4451,15 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         keepStreakContent.className = "dtt-settings-row-content is-between";
         const keepStreakHint = document.createElement("div");
         keepStreakHint.className = "dtt-settings-row-hint";
-        const keepStreakInput = document.createElement("input");
-        keepStreakInput.type = "checkbox";
-        keepStreakInput.className = "dtt-settings-checkbox";
-        keepStreakInput.checked = state.streakControl.keepStreakEnabled;
-        keepStreakInput.addEventListener("click", (event) => event.stopPropagation());
-        keepStreakInput.addEventListener("change", (event) => {
+        const keepStreakInput = document.createElement("button");
+        keepStreakInput.type = "button";
+        keepStreakInput.className = "dtt-language-button dtt-settings-toggle-button";
+        setSettingsToggleButtonState(keepStreakInput, state.streakControl.keepStreakEnabled);
+        keepStreakInput.addEventListener("click", (event) => {
+            event.preventDefault();
             event.stopPropagation();
-            applyKeepStreakEnabled(event.target.checked);
+            applyKeepStreakEnabled(!state.streakControl.keepStreakEnabled);
+            setSettingsToggleButtonState(keepStreakInput, state.streakControl.keepStreakEnabled);
             updatePopupStaticTextV2();
             updatePopupDynamicContentV2();
             updatePopupHistoryV2();
@@ -4363,7 +4494,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             applyHistoryRetentionMonths(event.target.value);
             event.target.value = String(state.historyRetentionMonths);
             if (state.popup.retentionSuffixNode) {
-                state.popup.retentionSuffixNode.textContent = getRetentionDisplayText();
+                state.popup.retentionSuffixNode.textContent = getMonthsPlural(state.historyRetentionMonths);
             }
             updatePopupStaticTextV2();
             updatePopupDynamicContentV2();
@@ -4372,39 +4503,28 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         const retSuffix = document.createElement("span");
         retSuffix.className = "dtt-retention-suffix";
-        retSuffix.textContent = getRetentionDisplayText();
+        retSuffix.textContent = getMonthsPlural(state.historyRetentionMonths);
 
-        retContent.append(retentionInput, retSuffix);
-        retRow.append(retTitle, retContent);
-        settingsPanel.appendChild(retRow);
-
-        const retentionForeverRow = document.createElement("div");
-        retentionForeverRow.className = "dtt-settings-row";
-        const retentionForeverTitle = document.createElement("div");
-        retentionForeverTitle.className = "dtt-settings-row-label";
-        const retentionForeverContent = document.createElement("div");
-        retentionForeverContent.className = "dtt-settings-row-content is-between";
-        const retentionForeverHint = document.createElement("div");
-        retentionForeverHint.className = "dtt-settings-row-hint";
-        const retentionForeverInput = document.createElement("input");
-        retentionForeverInput.type = "checkbox";
-        retentionForeverInput.className = "dtt-settings-checkbox";
-        retentionForeverInput.checked = state.historyRetentionForever;
-        retentionForeverInput.addEventListener("click", (event) => event.stopPropagation());
-        retentionForeverInput.addEventListener("change", (event) => {
+        const retentionForeverInput = document.createElement("button");
+        retentionForeverInput.type = "button";
+        retentionForeverInput.className = "dtt-language-button dtt-settings-pill-button";
+        setRetentionForeverButtonState(retentionForeverInput, state.historyRetentionForever);
+        retentionForeverInput.addEventListener("click", (event) => {
+            event.preventDefault();
             event.stopPropagation();
             const previousValue = state.historyRetentionForever;
-            applyHistoryRetentionForever(event.target.checked);
-            event.target.checked = state.historyRetentionForever;
+            applyHistoryRetentionForever(!state.historyRetentionForever);
+            setRetentionForeverButtonState(retentionForeverInput, state.historyRetentionForever);
             if (previousValue !== state.historyRetentionForever) {
                 updatePopupStaticTextV2();
                 updatePopupDynamicContentV2();
                 updatePopupHistoryV2(getDailySummaryRows(getComputedDayTotalSeconds()));
             }
         });
-        retentionForeverContent.append(retentionForeverHint, retentionForeverInput);
-        retentionForeverRow.append(retentionForeverTitle, retentionForeverContent);
-        settingsPanel.appendChild(retentionForeverRow);
+
+        retContent.append(retentionInput, retSuffix, retentionForeverInput);
+        retRow.append(retTitle, retContent);
+        settingsPanel.appendChild(retRow);
 
         const exportRow = document.createElement("div");
         exportRow.className = "dtt-settings-row";
@@ -4626,8 +4746,6 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.settingsPauseThresholdHintNode = pauseThresholdHint;
         state.popup.settingsRetentionTitleNode = retTitle;
         state.popup.settingsRetentionInputNode = retentionInput;
-        state.popup.settingsRetentionForeverTitleNode = retentionForeverTitle;
-        state.popup.settingsRetentionForeverHintNode = retentionForeverHint;
         state.popup.settingsRetentionForeverInputNode = retentionForeverInput;
         state.popup.settingsStreakShieldsTitleNode = streakShieldsTitle;
         state.popup.settingsStreakShieldsHintNode = streakShieldsHint;
@@ -4800,7 +4918,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.viewToggleNode.classList.toggle("is-active", isWeekMode);
         }
         if (state.popup.hintNode) {
-            state.popup.hintNode.textContent = state.popup.isPinned ? t("popupHintPinned") : t("popupHintHover");
+            state.popup.hintNode.textContent = "";
         }
         if (state.popup.sessionsTitleNode) {
             state.popup.sessionsTitleNode.textContent = t("sessionsTodayTitle");
@@ -4842,7 +4960,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.settingsBadgeHintNode.textContent = t("badgeVisibilityHint");
         }
         if (state.popup.settingsBadgeInputNode) {
-            state.popup.settingsBadgeInputNode.checked = state.badgeVisible;
+            setSettingsToggleButtonState(state.popup.settingsBadgeInputNode, state.badgeVisible);
         }
         if (state.popup.settingsChannelTitleNode) {
             state.popup.settingsChannelTitleNode.textContent = getChannelUiText().title;
@@ -4870,14 +4988,11 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.settingsRetentionInputNode.disabled = state.historyRetentionForever;
             state.popup.settingsRetentionInputNode.value = String(state.historyRetentionMonths);
         }
-        if (state.popup.settingsRetentionForeverTitleNode) {
-            state.popup.settingsRetentionForeverTitleNode.textContent = t("retentionForeverLabel");
-        }
-        if (state.popup.settingsRetentionForeverHintNode) {
-            state.popup.settingsRetentionForeverHintNode.textContent = t("retentionForeverHint");
-        }
         if (state.popup.settingsRetentionForeverInputNode) {
-            state.popup.settingsRetentionForeverInputNode.checked = state.historyRetentionForever;
+            setRetentionForeverButtonState(
+                state.popup.settingsRetentionForeverInputNode,
+                state.historyRetentionForever
+            );
         }
         if (state.popup.settingsStreakProgressionTitleNode) {
             state.popup.settingsStreakProgressionTitleNode.textContent = t("streakProgressionLabel");
@@ -4886,7 +5001,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.settingsStreakProgressionHintNode.textContent = t("streakProgressionHint");
         }
         if (state.popup.settingsStreakProgressionInputNode) {
-            state.popup.settingsStreakProgressionInputNode.checked = state.longStreakProgressionEnabled;
+            setSettingsToggleButtonState(
+                state.popup.settingsStreakProgressionInputNode,
+                state.longStreakProgressionEnabled
+            );
         }
         if (state.popup.settingsStreakProgressionPreviewNode) {
             state.popup.settingsStreakProgressionPreviewNode.textContent = `${t("streakProgressionTiersLabel")}: ${getStreakTierPreviewText()}`;
@@ -4901,7 +5019,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.updateCheckBtnNode.textContent = t("updateCheckButton");
         }
         if (state.popup.retentionSuffixNode) {
-            state.popup.retentionSuffixNode.textContent = getRetentionDisplayText();
+            state.popup.retentionSuffixNode.textContent = getMonthsPlural(state.historyRetentionMonths);
         }
         if (state.popup.exportTitleNode) {
             state.popup.exportTitleNode.textContent = t("exportTitle");
@@ -4989,7 +5107,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const weeklySummary = getWeeklySummaryData(totalSeconds);
 
         if (state.popup.hintNode) {
-            state.popup.hintNode.textContent = state.popup.isPinned ? t("popupHintPinned") : t("popupHintHover");
+            state.popup.hintNode.textContent = "";
         }
         if (state.popup.summaryDateNode) {
             state.popup.summaryDateNode.textContent = isWeekMode ? t("weeklyRangeLabel") : state.day.date;
@@ -5552,6 +5670,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         if (state.runtime.injectRetryTimeoutId !== null) {
             clearTimeout(state.runtime.injectRetryTimeoutId);
             state.runtime.injectRetryTimeoutId = null;
+        }
+        if (state.runtime.devChannelRetryTimeoutId !== null) {
+            clearTimeout(state.runtime.devChannelRetryTimeoutId);
+            state.runtime.devChannelRetryTimeoutId = null;
         }
         if (state.popup.removeTimeoutId !== null) {
             clearTimeout(state.popup.removeTimeoutId);

@@ -15,6 +15,7 @@
     const selectedChannel = savedChannel === "test" || savedChannel === "dev" ? savedChannel : "release";
 
     const importRelease = () => import(releaseUrl).catch(() => {});
+    const retryBoot = () => setTimeout(bootDailyTimeTracker, 1000);
     const resetToRelease = () => {
         try {
             Spicetify.LocalStorage.set(channelKey, "release");
@@ -24,6 +25,10 @@
         import(channels[selectedChannel]).catch(() => {
             if (selectedChannel === "release") {
                 return;
+            }
+
+            if (selectedChannel === "dev") {
+                return retryBoot();
             }
 
             resetToRelease();
@@ -39,10 +44,9 @@
         return setTimeout(bootDailyTimeTracker, 500);
     }
 
-    const uid = Spicetify.Platform.username;
+    const uid = Spicetify.Platform?.username;
     if (!uid) {
-        resetToRelease();
-        return importRelease();
+        return setTimeout(bootDailyTimeTracker, 500);
     }
 
     fetch(`https://vvertax.site/dtt/api/dev_channel.php?uid=${encodeURIComponent(uid)}&t=${cacheBust}`)
@@ -56,7 +60,6 @@
             return importRelease();
         })
         .catch(() => {
-            resetToRelease();
-            importRelease();
+            retryBoot();
         });
 })();
