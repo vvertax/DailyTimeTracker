@@ -70,16 +70,22 @@ Want to read in Russian? Click [here](./ROADMAP-Rus.md).
 
 ## Planned
 
-> The remaining planned features are targeted for v1.7.1.
+> The next release-focused milestone is `v2.0.0`.
 
 ### Daily Goal
+> Planned for the release version.
+
 - User-defined daily goal such as `30m`, `1h`, or a custom value.
 - Goal progress visible in the widget and popup.
+- Test builds are only a pre-release channel for validating the same feature before it lands in Release.
 
 ### Keep History Forever
+> Planned for the release version.
+
 - Add a `Forever` retention option alongside the monthly presets.
 - Show a warning before enabling it because long-term storage usage can grow significantly.
 - Keep the default behavior lightweight while allowing power users to keep everything.
+- Test builds are only a pre-release channel for validating the same feature before it lands in Release.
 
 ## Cancelled
 

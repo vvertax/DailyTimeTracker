@@ -61,6 +61,7 @@ spicetify apply
 The extension uses `Spicetify.LocalStorage`:
 
 - `dtt_today_v3`
+- `dtt_sessions_v1`
 - `dtt_history_v2`
 - `dtt_language_v1`
 - `dtt_history_retention_months_v1`
