@@ -66,26 +66,48 @@ Want to read in Russian? Click [here](./ROADMAP-Rus.md).
 - Shields preserve the current streak but do not increase it.
 - Optional `Keep streak` mode preserves the current streak without growth while enabled.
 
+### Daily Goal
+> Shipped in [v2.0.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v2.0.0)
+
+- User-defined daily listening goal in Settings.
+- Goal progress is visible in the popup.
+- `0` disables the goal without removing the setting.
+
+### Keep History Forever
+> Shipped in [v2.0.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v2.0.0)
+
+- Added a `Forever` retention option alongside monthly history limits.
+- Users can keep all history without automatic pruning.
+- The setting stays optional so the default behavior remains lightweight.
+
+### LocalStorage Optimization
+> Shipped in [v2.0.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v2.0.0)
+
+- Storage was restructured into separate keys for today, sessions, and compact history.
+- Old day session details are no longer kept forever.
+- Migration from the older format happens automatically.
+
+### Runtime Refactor
+> Shipped in [v2.0.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v2.0.0)
+
+- The hosted runtime was split into `main.mjs`, `core.mjs`, `dtt_optimization.mjs`, and `version.json`.
+- This makes updates easier to maintain and deploy.
+
+### Channel Runtime Isolation
+> Shipped in [v2.0.1](https://github.com/vvertax/DailyTimeTracker/releases/tag/v2.0.1)
+
+- `release`, `test`, and `dev` now use clearer channel-specific runtime files.
+- Test and Dev are easier to update without touching the main release entry flow.
+- Shared infrastructure such as API endpoints and storage optimization can still stay centralized when needed.
+
 ---
 
 ## Planned
 
-> The next release-focused milestone is `v2.0.0`.
+> No release-focused milestone is locked right now.
 
-### Daily Goal
-> Planned for the release version.
-
-- User-defined daily goal such as `30m`, `1h`, or a custom value.
-- Goal progress visible in the widget and popup.
-- Test builds are only a pre-release channel for validating the same feature before it lands in Release.
-
-### Keep History Forever
-> Planned for the release version.
-
-- Add a `Forever` retention option alongside the monthly presets.
-- Show a warning before enabling it because long-term storage usage can grow significantly.
-- Keep the default behavior lightweight while allowing power users to keep everything.
-- Test builds are only a pre-release channel for validating the same feature before it lands in Release.
+- Smaller UI polish and maintenance updates continue between feature milestones.
+- Larger future features will be added here once they are scoped clearly enough to commit publicly.
 
 ## Cancelled
 
