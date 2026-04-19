@@ -15,12 +15,14 @@ Tracks how much time you spend listening to Spotify each day and shows a timer i
 - **Smart Tracking:** Playback pauses are tolerated for a configurable threshold before a session is closed.
 - **Configurable Pause Threshold:** Choose `15 / 30 / 60 / 120 sec` from Settings.
 - **Detailed History:** Hover popup with today's sessions and archived daily totals.
+- **Top Tracks Today:** Optional summary block under the daily total showing the most played tracks for the current day.
 - **Weekly Summary:** A dedicated `Week` toggle shows the last 7 days, daily average, best day, and a mini bar chart.
 - **Compact / Full Popup Modes:** Compact keeps the popup shorter; Full reveals all sessions, full history, and the weekly toggle.
 - **Collapsible Lists:** Today Sessions and History collapse automatically in Compact mode.
+- **Daily Goal:** Set a listening goal in minutes and track progress directly in the popup.
 - **History Retention:** Keep history for 1 to 6 months with automatic pruning in the visible archive.
 - **Streak Fire Icon:** A streak counter appears from 2+ consecutive qualifying days.
-- **Streak Shields + Keep Streak:** Up to `8` missed days per calendar month can be auto-protected, and an optional manual `Keep streak` toggle preserves the current streak without growth.
+- **Streak Shields + Keep Streak:** Up to `4` missed days per calendar month can be auto-protected, and an optional manual `Keep streak` toggle preserves the current streak without growth.
 - **Long Streak Progression:** Optional extended color progression for long streaks.
 - **Export to CSV / JSON:** Download all retained history plus today from Settings.
 - **Import from JSON:** Restore or merge a previous JSON export with preview and validation.
@@ -33,8 +35,8 @@ Tracks how much time you spend listening to Spotify each day and shows a timer i
 
 - **Top Bar Widget:** Shows the current total for today.
 - **Popup Header:** Title, optional user badge, streak icon, mode-aware `Week` toggle, and Settings button.
-- **Popup Sections:** Compact mode shows a shorter Today view, while Full mode exposes full session/history lists and the Weekly Summary view.
-- **Settings Panel:** Language, popup mode, pause threshold, streak shields, `Keep streak`, history retention, long streak progression, export, import, destructive reset actions, and version text.
+- **Popup Sections:** Compact mode shows a shorter Today view, while Full mode exposes full session/history lists, optional top tracks, and the Weekly Summary view.
+- **Settings Panel:** Language, popup mode, top tracks toggle, top tracks count, pause threshold, streak shields, `Keep streak`, daily goal, history retention, long streak progression, export, import, destructive reset actions, and version text.
 
 ## Installation
 
@@ -64,12 +66,20 @@ The extension uses `Spicetify.LocalStorage`:
 - `dtt_sessions_v1`
 - `dtt_history_v2`
 - `dtt_language_v1`
+- `dtt_daily_goal_seconds_v1`
 - `dtt_history_retention_months_v1`
+- `dtt_history_retention_forever_v1`
 - `dtt_popup_mode_v1`
 - `dtt_pause_threshold_seconds_v1`
 - `dtt_streak_v1`
 - `dtt_streak_control_v1`
 - `dtt_long_streak_progression_enabled_v1`
+- `dtt_badge_visibility_v1`
+- `dtt_session_track_counts_v1`
+- `dtt_top_tracks_visible_v1`
+- `dtt_top_tracks_display_count_v1`
+- `dtt_channel_v1`
+- `dtt_test_notice_seen_v1`
 - `dtt_version_v1`
 
 ## Notes

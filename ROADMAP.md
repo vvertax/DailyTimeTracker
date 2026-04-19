@@ -100,14 +100,32 @@ Want to read in Russian? Click [here](./ROADMAP-Rus.md).
 - Test and Dev are easier to update without touching the main release entry flow.
 - Shared infrastructure such as API endpoints and storage optimization can still stay centralized when needed.
 
+### Top Tracks Today
+> Shipped in [v2.0.2-test](https://github.com/vvertax/DailyTimeTracker/releases/tag/v2.0.2-test)
+
+- Optional `Top tracks` block under the main daily total in the popup.
+- Shows the most played tracks for the current day only.
+- Settings allow showing `1`, `2`, or `3` tracks.
+- The block is disabled by default.
+- Track plays are only counted after at least `20` seconds of real playback to avoid fake skip-to-end counts.
+
 ---
 
 ## Planned
 
-> No release-focused milestone is locked right now.
+> No release-focused milestone is locked right now, but the following ideas are considered genuinely useful and likely to stay in scope.
 
-- Smaller UI polish and maintenance updates continue between feature milestones.
-- Larger future features will be added here once they are scoped clearly enough to commit publicly.
+- `Yesterday vs Today`
+  - Quick comparison against the previous day to show whether listening time is up or down.
+- `Longest Session Today`
+  - A compact summary of the single longest session in the current day.
+- `Goal Forecast`
+  - Estimate whether the current pace will reach the daily goal and how much time is left.
+- `Top Artists Today`
+  - Artist-level aggregation on top of track-level daily listening data.
+- `History Filters`
+  - Simple filters such as goal-reached days, long-session days, or days above a chosen total threshold.
+- Smaller UI polish and maintenance updates continue between larger feature milestones.
 
 ## Cancelled
 
