@@ -612,6 +612,11 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     }
 
     function getIntervalDurationSeconds(interval) {
+        const listenedMs = Number(interval?.listenedMs);
+        if (Number.isFinite(listenedMs) && listenedMs >= 0) {
+            return Math.max(0, Math.floor(listenedMs / 1000));
+        }
+
         return Math.max(0, Math.floor((interval.end - interval.start) / 1000));
     }
 
@@ -628,17 +633,29 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             return null;
         }
 
-        return {
+        const normalized = {
             start: interval.start,
             end: interval.end
         };
+        const listenedMs = Math.max(0, Math.floor(Number(interval.listenedMs)));
+        if (Number.isFinite(listenedMs)) {
+            normalized.listenedMs = listenedMs;
+        }
+
+        return normalized;
     }
 
     function cloneInterval(interval) {
-        return {
+        const cloned = {
             start: interval.start,
             end: interval.end
         };
+
+        if (Number.isFinite(interval?.listenedMs)) {
+            cloned.listenedMs = interval.listenedMs;
+        }
+
+        return cloned;
     }
 
     function createEmptyDay(date) {
@@ -667,10 +684,16 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 return null;
             }
 
-            return {
+            const normalized = {
                 start: start * 1000,
                 end: end * 1000
             };
+            const listenedSeconds = Math.max(0, Math.floor(Number(interval[2])));
+            if (Number.isFinite(listenedSeconds)) {
+                normalized.listenedMs = listenedSeconds * 1000;
+            }
+
+            return normalized;
         }
 
         return normalizeInterval(interval);
@@ -684,7 +707,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         const startSeconds = Math.floor(normalized.start / 1000);
         const endSeconds = Math.max(startSeconds + 1, Math.ceil(normalized.end / 1000));
-        return [startSeconds, endSeconds];
+        const listenedSeconds = getIntervalDurationSeconds(normalized);
+        return [startSeconds, endSeconds, listenedSeconds];
     }
 
     function normalizeSessionsData(data, fallbackDate) {
@@ -1842,6 +1866,58 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         return Math.max(storedTotal, intervalsTotal);
     }
 
+    function createLiveSession(startAt) {
+        return {
+            start: startAt,
+            listenedMs: 0,
+            lastResumedAt: startAt
+        };
+    }
+
+    function getLiveSessionListenedMs(now = Date.now()) {
+        if (!state.currentSession) {
+            return 0;
+        }
+
+        const listenedMs = Math.max(0, Math.floor(Number(state.currentSession.listenedMs) || 0));
+        if (typeof state.currentSession.lastResumedAt !== "number") {
+            return listenedMs;
+        }
+
+        return listenedMs + Math.max(0, now - state.currentSession.lastResumedAt);
+    }
+
+    function pauseCurrentSession(now) {
+        if (!state.currentSession || typeof state.currentSession.lastResumedAt !== "number") {
+            return;
+        }
+
+        state.currentSession.listenedMs = getLiveSessionListenedMs(now);
+        state.currentSession.lastResumedAt = null;
+    }
+
+    function resumeCurrentSession(now) {
+        if (!state.currentSession) {
+            return;
+        }
+
+        if (typeof state.currentSession.lastResumedAt !== "number") {
+            state.currentSession.lastResumedAt = now;
+        }
+    }
+
+    function buildIntervalFromCurrentSession(endAt, now = endAt) {
+        if (!state.currentSession) {
+            return null;
+        }
+
+        return normalizeInterval({
+            start: state.currentSession.start,
+            end: endAt,
+            listenedMs: getLiveSessionListenedMs(now)
+        });
+    }
+
     function getVisibleSessionInterval(now = Date.now()) {
         if (!state.currentSession) {
             return null;
@@ -1849,12 +1925,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         const liveEnd = state.idleStartedAt === null
             ? now
-            : Math.min(now, state.idleStartedAt + state.pauseSeconds * 1000);
+            : state.idleStartedAt;
 
-        return normalizeInterval({
-            start: state.currentSession.start,
-            end: liveEnd
-        });
+        return buildIntervalFromCurrentSession(liveEnd, now);
     }
 
     function getComputedDayTotalSeconds(now = Date.now()) {
@@ -2331,17 +2404,18 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
     function startSession(startAt) {
         if (!state.currentSession) {
-            state.currentSession = { start: startAt, end: null };
+            state.currentSession = createLiveSession(startAt);
+            return;
         }
+
+        resumeCurrentSession(startAt);
     }
 
     function closeSession(endAt) {
         if (!state.currentSession) return;
 
-        const interval = normalizeInterval({
-            start: state.currentSession.start,
-            end: endAt
-        });
+        pauseCurrentSession(endAt);
+        const interval = buildIntervalFromCurrentSession(endAt);
 
         if (interval) {
             state.day.intervals.push(interval);
@@ -2358,12 +2432,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         computeStreak();
 
-        const wasSessionActive = Boolean(state.currentSession);
+        const wasSessionActive = Boolean(state.currentSession && typeof state.currentSession.lastResumedAt === "number");
         if (state.currentSession) {
             const midnight = getMidnightTimestamp(state.day.date);
-            const cappedSession = clampIntervalEnd(
-                { start: state.currentSession.start, end: midnight },
-                midnight
+            pauseCurrentSession(Math.min(Date.now(), midnight));
+            const cappedSession = buildIntervalFromCurrentSession(
+                state.idleStartedAt === null ? midnight : Math.min(state.idleStartedAt, midnight)
             );
 
             if (cappedSession) {
@@ -2373,7 +2447,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         archiveDay(state.day);
         state.day = createEmptyDay(today);
-        state.currentSession = wasSessionActive ? { start: getMidnightTimestamp(state.day.date), end: null } : null;
+        state.currentSession = wasSessionActive ? createLiveSession(getMidnightTimestamp(state.day.date)) : null;
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
         saveTodayData();
@@ -5552,17 +5626,19 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         if (state.idleStartedAt === null) {
             state.idleStartedAt = now;
+            pauseCurrentSession(now);
+            saveTodayData(now);
         }
 
         state.silenceSeconds = Math.floor((now - state.idleStartedAt) / 1000);
 
         if (state.silenceSeconds < state.pauseSeconds) {
-            setWidgetPausedState(false);
+            setWidgetPausedState(true);
             return;
         }
 
         setWidgetPausedState(true);
-        closeSession(state.idleStartedAt + state.pauseSeconds * 1000);
+        closeSession(state.idleStartedAt);
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
         saveTodayData(now);
@@ -5629,7 +5705,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             clearPopupHideTimeout();
 
             if (state.currentSession) {
-                closeSession(Date.now());
+                closeSession(state.idleStartedAt ?? Date.now());
             }
 
             saveTodayData();
