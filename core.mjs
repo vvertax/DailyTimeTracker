@@ -1,4 +1,4 @@
-// ==============================================================
+﻿// ==============================================================
 // Daily Time Tracker - Spicetify Extension
 // Tracks Spotify listening time by day and shows a hover breakdown.
 // ==============================================================
@@ -49,11 +49,15 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         retentionKey: "dtt_history_retention_months_v1",
         retentionForeverKey: "dtt_history_retention_forever_v1",
         popupModeKey: "dtt_popup_mode_v1",
+        performanceModeKey: "dtt_performance_mode_v1",
         pauseThresholdKey: "dtt_pause_threshold_seconds_v1",
         longStreakProgressionKey: "dtt_long_streak_progression_enabled_v1",
         streakKey: "dtt_streak_v1",
         streakControlKey: "dtt_streak_control_v1",
         badgeVisibilityKey: "dtt_badge_visibility_v1",
+        sessionTrackCountsKey: "dtt_session_track_counts_v1",
+        topTracksVisibleKey: "dtt_top_tracks_visible_v1",
+        topTracksDisplayCountKey: "dtt_top_tracks_display_count_v1",
         channelKey: runtimeConfig.channelKey,
         testNoticeSeenKey: runtimeConfig.testNoticeSeenKey,
         versionKey: "dtt_version_v1",
@@ -64,6 +68,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         devChannelApiBaseUrl: runtimeConfig.devChannelApiBaseUrl,
         apiHealthCheckIntervalMs: 300000,
         devChannelRetryMs: 800,
+        minTrackCountListenMs: 20000,
         streakThresholdSeconds: 300,
         streakShieldsPerMonth: 4,
         historyRetentionMonths: 1,
@@ -105,14 +110,18 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         historyRetentionMonths: loadHistoryRetentionMonths(),
         historyRetentionForever: loadHistoryRetentionForever(),
         popupMode: loadPopupMode(),
+        performanceMode: loadPerformanceMode(),
         pauseSeconds: loadPauseSeconds(),
         dailyGoalSeconds: loadDailyGoalSeconds(),
         longStreakProgressionEnabled: loadLongStreakProgressionEnabled(),
         streak: loadStreakData(),
         streakControl: loadStreakControlData(),
         badgeVisible: loadBadgeVisibility(),
+        topTracksVisible: loadTopTracksVisible(),
+        topTracksDisplayCount: loadTopTracksDisplayCount(),
         badge: null,
         devChannelAvailable: false,
+        sessionTrackData: null,
         currentSession: null,
         idleStartedAt: null,
         silenceSeconds: 0,
@@ -124,6 +133,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             hideTimeoutId: null,
             removeTimeoutId: null,
             viewMode: "today",
+            weeklyDetailMode: "summary",
             viewToggleNode: null,
             hintNode: null,
             titleNode: null,
@@ -134,6 +144,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             summaryGoalLabelNode: null,
             summaryGoalValueNode: null,
             summaryGoalProgressNode: null,
+            summaryTopTracksWrapNode: null,
+            summaryTopTracksListNode: null,
             intervalsSectionNode: null,
             sessionsTitleNode: null,
             intervalsListNode: null,
@@ -146,13 +158,26 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             historyExpanded: false,
             weeklySectionNode: null,
             weeklySectionTitleNode: null,
+            weeklyDetailSwitchNode: null,
             weeklyAverageLabelNode: null,
             weeklyAverageValueNode: null,
             weeklyBestDayLabelNode: null,
             weeklyBestDayValueNode: null,
             weeklyBarsNode: null,
+            weeklyCompareNode: null,
+            weeklyCompareTodayLabelNode: null,
+            weeklyCompareTodayValueNode: null,
+            weeklyCompareYesterdayLabelNode: null,
+            weeklyCompareYesterdayValueNode: null,
+            weeklyCompareDeltaLabelNode: null,
+            weeklyCompareDeltaValueNode: null,
             lastHistorySignature: "",
+            lastIntervalsSignature: "",
+            lastTopTracksSignature: "",
+            lastWeeklySignature: "",
+            lastSummarySignature: "",
             lastLanguage: null,
+            weeklyBarNodes: [],
             languageButtons: [],
             retentionLabelNode: null,
             retentionSuffixNode: null,
@@ -168,6 +193,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             settingsPopupModeTitleNode: null,
             settingsPopupModeHintNode: null,
             settingsPopupModeButtons: [],
+            settingsPerformanceModeTitleNode: null,
+            settingsPerformanceModeHintNode: null,
+            settingsPerformanceModeButtons: [],
             settingsChannelTitleNode: null,
             settingsChannelHintNode: null,
             settingsChannelButtons: [],
@@ -193,6 +221,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             settingsBadgeTitleNode: null,
             settingsBadgeHintNode: null,
             settingsBadgeInputNode: null,
+            settingsTopTracksTitleNode: null,
+            settingsTopTracksHintNode: null,
+            settingsTopTracksInputNode: null,
+            settingsTopTracksCountRowNode: null,
+            settingsTopTracksCountTitleNode: null,
+            settingsTopTracksCountButtons: [],
             exportTitleNode: null,
             exportCsvBtnNode: null,
             exportJsonBtnNode: null,
@@ -221,7 +255,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             pendingInjectCheck: false,
             resizeHandler: null,
             beforeUnloadHandler: null,
-            visibilityHandler: null
+            visibilityHandler: null,
+            lastWidgetSignature: "",
+            injectObserverTimeoutId: null
         },
         runtime: {
             intervalId: null,
@@ -231,98 +267,135 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             updateCheckIntervalId: null,
             apiHealthCheckIntervalId: null,
             _streakTestMode: false,
-            _lastTrackUri: null
+            _lastTrackUri: null,
+            _lastTrackProgressMs: null,
+            _activeTrackInfo: null,
+            _activeTrackKey: "",
+            _activeTrackListenedMs: 0,
+            _activeTrackQualified: false,
+            _activeTrackFinalized: false,
+            _lastStreakThresholdMet: false,
+            popupPositionFrameId: null
         }
     };
 
     state.day = loadTodayData();
+    state.sessionTrackData = loadTodaySessionTrackData(state.day.date);
+    state.runtime._lastStreakThresholdMet = getComputedDayTotalSeconds() >= loadStreakThreshold();
 
     const I18N = {
         ru: {
-            widgetTitle: "Нажмите, чтобы закрепить статистику",
-            popupTitle: "Статистика по дням",
-            popupHintPinned: "Закреплено. Нажмите, чтобы открепить.",
-            popupHintHover: "Предпросмотр. Нажмите, чтобы закрепить.",
-            todayLabel: "сегодня",
-            emptyState: "Пока нет данных по дням.",
-            sessionsTodayTitle: "Сессии сегодня",
-            historyTitle: "История",
-            retentionLabel: "Хранить историю",
-            retentionSuffix: "месяц(ев)",
-            settingsTitle: "Настройки",
-            settingsBack: "Назад",
-            languageLabel: "Язык",
-            popupModeLabel: "Режим popup",
-            popupModeHint: "Compact делает popup короче, Full показывает все сессии, всю историю и weekly view.",
+            widgetTitle: "РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ Р·Р°РєСЂРµРїРёС‚СЊ СЃС‚Р°С‚РёСЃС‚РёРєСѓ",
+            popupTitle: "РЎС‚Р°С‚РёСЃС‚РёРєР° РїРѕ РґРЅСЏРј",
+            popupHintPinned: "Р—Р°РєСЂРµРїР»РµРЅРѕ. РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ РѕС‚РєСЂРµРїРёС‚СЊ.",
+            popupHintHover: "РџСЂРµРґРїСЂРѕСЃРјРѕС‚СЂ. РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ Р·Р°РєСЂРµРїРёС‚СЊ.",
+            todayLabel: "СЃРµРіРѕРґРЅСЏ",
+            emptyState: "РџРѕРєР° РЅРµС‚ РґР°РЅРЅС‹С… РїРѕ РґРЅСЏРј.",
+            sessionsTodayTitle: "РЎРµСЃСЃРёРё СЃРµРіРѕРґРЅСЏ",
+            topTracksEmpty: "РџРѕРєР° РЅРµС‚ РїСЂРѕСЃР»СѓС€РёРІР°РЅРёР№.",
+            topTracksToggleLabel: "РўРѕРї С‚СЂРµРєРѕРІ",
+            topTracksToggleHint: "РџРѕРєР°Р·С‹РІР°С‚СЊ Р±Р»РѕРє СЃ СЃР°РјС‹РјРё С‡Р°СЃС‚Рѕ РїСЂРѕРёРіСЂР°РЅРЅС‹РјРё С‚СЂРµРєР°РјРё Р·Р° С‚РµРєСѓС‰РёР№ РґРµРЅСЊ.",
+            topTracksCountLabel: "РџРѕРєР°Р·С‹РІР°С‚СЊ С‚СЂРµРєРѕРІ",
+            topTracksCountHint: "РЎРєРѕР»СЊРєРѕ С‚СЂРµРєРѕРІ РїРѕРєР°Р·С‹РІР°С‚СЊ РІ Р±Р»РѕРєРµ СЃРІРѕРґРєРё.",
+            topTracksPlayCount: "РїСЂРѕСЃР».",
+            historyTitle: "РСЃС‚РѕСЂРёСЏ",
+            dailyGoalLabel: "Daily Goal",
+            dailyGoalHint: "Goal in minutes. `0` disables the goal.",
+            dailyGoalUnit: "min",
+            dailyGoalProgress: "Р¦РµР»СЊ",
+            dailyGoalComplete: "Р¦РµР»СЊ РІС‹РїРѕР»РЅРµРЅР°",
+            retentionLabel: "РҐСЂР°РЅРёС‚СЊ РёСЃС‚РѕСЂРёСЋ",
+            retentionSuffix: "РјРµСЃСЏС†(РµРІ)",
+            retentionForeverLabel: "РҐСЂР°РЅРёС‚СЊ РёСЃС‚РѕСЂРёСЋ РІСЃРµРіРґР°",
+            retentionForeverHint: "РћС‚РєР»СЋС‡Р°РµС‚ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєСѓСЋ РѕС‡РёСЃС‚РєСѓ Р°СЂС…РёРІР°.",
+            retentionForeverValue: "Р’СЃРµРіРґР°",
+            retentionForeverWarning: "Р’РєР»СЋС‡РёС‚СЊ СЂРµР¶РёРј Forever? РСЃС‚РѕСЂРёСЏ РїРµСЂРµСЃС‚Р°РЅРµС‚ РѕС‡РёС‰Р°С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё Рё СЃРѕ РІСЂРµРјРµРЅРµРј РјРѕР¶РµС‚ Р·Р°РјРµС‚РЅРѕ СѓРІРµР»РёС‡РёС‚СЊ РѕР±СЉРµРј LocalStorage.",
+            toggleOn: "Р’РљР›",
+            toggleOff: "Р’Р«РљР›",
+            settingsTitle: "РќР°СЃС‚СЂРѕР№РєРё",
+            settingsBack: "РќР°Р·Р°Рґ",
+            languageLabel: "РЇР·С‹Рє",
+            popupModeLabel: "Р РµР¶РёРј popup",
+            popupModeHint: "Compact РґРµР»Р°РµС‚ popup РєРѕСЂРѕС‡Рµ, Full РїРѕРєР°Р·С‹РІР°РµС‚ РІСЃРµ СЃРµСЃСЃРёРё, РІСЃСЋ РёСЃС‚РѕСЂРёСЋ Рё weekly view.",
             popupModeCompact: "Compact",
             popupModeFull: "Full",
-            pauseThresholdLabel: "Порог паузы",
-            pauseThresholdHint: "Через сколько секунд паузы текущая сессия считается завершенной.",
-            streakShieldsLabel: "Щиты серии",
-            streakShieldsHint: "До 4 пропущенных дней в календарном месяце защищаются автоматически без роста серии.",
-            streakShieldsRemaining: "Осталось щитов в этом месяце",
+            performanceModeLabel: "Р РµР¶РёРј РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊРЅРѕСЃС‚Рё",
+            performanceModeHint: "РћР±Р»РµРіС‡Р°РµС‚ popup Рё РІРёР·СѓР°Р»СЊРЅС‹Рµ СЌС„С„РµРєС‚С‹ РЅР° СЃР»Р°Р±С‹С… CPU/GPU.",
+            performanceModeDefault: "РћР±С‹С‡РЅС‹Р№",
+            performanceModeLightweight: "Р›РµРіРєРёР№",
+            pauseThresholdLabel: "РџРѕСЂРѕРі РїР°СѓР·С‹",
+            pauseThresholdHint: "Р§РµСЂРµР· СЃРєРѕР»СЊРєРѕ СЃРµРєСѓРЅРґ РїР°СѓР·С‹ С‚РµРєСѓС‰Р°СЏ СЃРµСЃСЃРёСЏ СЃС‡РёС‚Р°РµС‚СЃСЏ Р·Р°РІРµСЂС€РµРЅРЅРѕР№.",
+            streakShieldsLabel: "Р©РёС‚С‹ СЃРµСЂРёРё",
+            streakShieldsHint: "Р”Рѕ 4 РїСЂРѕРїСѓС‰РµРЅРЅС‹С… РґРЅРµР№ РІ РєР°Р»РµРЅРґР°СЂРЅРѕРј РјРµСЃСЏС†Рµ Р·Р°С‰РёС‰Р°СЋС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё Р±РµР· СЂРѕСЃС‚Р° СЃРµСЂРёРё.",
+            streakShieldsRemaining: "РћСЃС‚Р°Р»РѕСЃСЊ С‰РёС‚РѕРІ РІ СЌС‚РѕРј РјРµСЃСЏС†Рµ",
             keepStreakLabel: "Keep streak",
-            keepStreakHint: "Сохраняет текущую серию без роста, пока режим включен.",
-            keepStreakProtectedToday: "Сегодня серия защищена вручную",
+            keepStreakHint: "РЎРѕС…СЂР°РЅСЏРµС‚ С‚РµРєСѓС‰СѓСЋ СЃРµСЂРёСЋ Р±РµР· СЂРѕСЃС‚Р°, РїРѕРєР° СЂРµР¶РёРј РІРєР»СЋС‡РµРЅ.",
+            keepStreakProtectedToday: "РЎРµРіРѕРґРЅСЏ СЃРµСЂРёСЏ Р·Р°С‰РёС‰РµРЅР° РІСЂСѓС‡РЅСѓСЋ",
             languageRu: "RU",
             languageEn: "EN",
-            streakLabel: "Серия",
-            streakDays: "дн.",
-            streakProgressionLabel: "Длинная прогрессия серии",
-            streakProgressionHint: "Добавляет больше цветовых уровней и переносит белый максимум на 500+.",
-            streakProgressionTiersLabel: "Активные уровни",
-            badgeVisibilityLabel: "Бейджик",
-            badgeVisibilityHint: "Показывать бейджик в заголовке popup.",
-            exportTitle: "Экспорт данных",
-            exportCsv: "Скачать CSV",
-            exportJson: "Скачать JSON",
-            importTitle: "Импорт из JSON",
-            importHint: "Восстановить или объединить данные из ранее экспортированного JSON.",
-            importMerge: "Мердж",
-            importReplace: "Заменить",
-            importReadError: "Не удалось прочитать выбранный JSON-файл.",
-            importInvalid: "Импорт отклонен: ожидается JSON в формате export (дата -> totalSeconds / intervals).",
-            importTooLarge: "Импорт отклонен: файл слишком большой.",
-            importTooManyDays: "Импорт отклонен: слишком много дней в файле.",
-            importTooManyIntervals: "Импорт отклонен: слишком много интервалов в одном дне.",
-            importConfirmMerge: "Импорт JSON с объединением?",
-            importConfirmReplace: "Импорт JSON с полной заменой?",
-            importPreviewDays: "Дней в файле",
-            importPreviewAffected: "Затронуто дней",
-            importPreviewConflicts: "Пересечений",
-            importPreviewImportedTotal: "Время в файле",
-            importPreviewResultTotal: "Итог после импорта",
-            importSuccessMerge: "Импорт завершен: данные объединены.",
-            importSuccessReplace: "Импорт завершен: данные заменены.",
-            updateCheckTitle: "Проверка обновлений",
-            updateCheckHint: "Проверить наличие новой версии вручную.",
-            updateCheckButton: "Проверить",
-            updateCheckCurrent: "У вас уже последняя версия.",
-            updateCheckFailed: "Не удалось проверить обновления прямо сейчас.",
-            resetDataTitle: "Очистка / Сброс данных",
-            resetDataHint: "Действия необратимы. Перед полным сбросом лучше экспортировать данные.",
-            resetToday: "Сбросить сегодня",
-            clearHistory: "Очистить историю",
-            fullWipe: "Полный сброс",
-            weeklyToggle: "Неделя",
-            weeklyToggleTitle: "Показать недельную сводку",
-            weeklyRangeLabel: "Последние 7 дней",
-            weeklySummaryTitle: "Недельная сводка",
-            weeklyAverageLabel: "Среднее в день",
-            weeklyBestDayLabel: "Самый активный день",
-            weeklyBestDayEmpty: "Нет данных",
-            confirmResetToday: "Сбросить данные за сегодня? История останется нетронутой.",
-            confirmClearHistory: "Очистить всю архивную историю? Данные за сегодня останутся.",
-            confirmFullWipe: "Полностью удалить все данные Daily Time Tracker и сбросить настройки?",
-            updateBadge: "ОБНОВЛЕНИЕ",
-            updateTitle: "Доступно обновление Daily Time Tracker",
-            updateSubtitle: "Перезагрузите Spotify для применения обновления.",
-            updateVersionLabel: "ВЕРСИЯ",
-            updateBtnRestart: "Перезапустить",
-            updateBtnReleaseNotes: "Что нового",
+            streakLabel: "РЎРµСЂРёСЏ",
+            streakDays: "РґРЅ.",
+            streakProgressionLabel: "Р”Р»РёРЅРЅР°СЏ РїСЂРѕРіСЂРµСЃСЃРёСЏ СЃРµСЂРёРё",
+            streakProgressionHint: "Р”РѕР±Р°РІР»СЏРµС‚ Р±РѕР»СЊС€Рµ С†РІРµС‚РѕРІС‹С… СѓСЂРѕРІРЅРµР№ Рё РїРµСЂРµРЅРѕСЃРёС‚ Р±РµР»С‹Р№ РјР°РєСЃРёРјСѓРј РЅР° 500+.",
+            streakProgressionTiersLabel: "РђРєС‚РёРІРЅС‹Рµ СѓСЂРѕРІРЅРё",
+            badgeVisibilityLabel: "Р‘РµР№РґР¶РёРє",
+            badgeVisibilityHint: "РџРѕРєР°Р·С‹РІР°С‚СЊ Р±РµР№РґР¶РёРє РІ Р·Р°РіРѕР»РѕРІРєРµ popup.",
+            exportTitle: "Р­РєСЃРїРѕСЂС‚ РґР°РЅРЅС‹С…",
+            exportCsv: "РЎРєР°С‡Р°С‚СЊ CSV",
+            exportJson: "РЎРєР°С‡Р°С‚СЊ JSON",
+            importTitle: "РРјРїРѕСЂС‚ РёР· JSON",
+            importHint: "Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ РёР»Рё РѕР±СЉРµРґРёРЅРёС‚СЊ РґР°РЅРЅС‹Рµ РёР· СЂР°РЅРµРµ СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°РЅРЅРѕРіРѕ JSON.",
+            importMerge: "РњРµСЂРґР¶",
+            importReplace: "Р—Р°РјРµРЅРёС‚СЊ",
+            importReadError: "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ JSON-С„Р°Р№Р».",
+            importInvalid: "РРјРїРѕСЂС‚ РѕС‚РєР»РѕРЅРµРЅ: РѕР¶РёРґР°РµС‚СЃСЏ JSON РІ С„РѕСЂРјР°С‚Рµ export (РґР°С‚Р° -> totalSeconds / intervals).",
+            importTooLarge: "РРјРїРѕСЂС‚ РѕС‚РєР»РѕРЅРµРЅ: С„Р°Р№Р» СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕР№.",
+            importTooManyDays: "РРјРїРѕСЂС‚ РѕС‚РєР»РѕРЅРµРЅ: СЃР»РёС€РєРѕРј РјРЅРѕРіРѕ РґРЅРµР№ РІ С„Р°Р№Р»Рµ.",
+            importTooManyIntervals: "РРјРїРѕСЂС‚ РѕС‚РєР»РѕРЅРµРЅ: СЃР»РёС€РєРѕРј РјРЅРѕРіРѕ РёРЅС‚РµСЂРІР°Р»РѕРІ РІ РѕРґРЅРѕРј РґРЅРµ.",
+            importConfirmMerge: "РРјРїРѕСЂС‚ JSON СЃ РѕР±СЉРµРґРёРЅРµРЅРёРµРј?",
+            importConfirmReplace: "РРјРїРѕСЂС‚ JSON СЃ РїРѕР»РЅРѕР№ Р·Р°РјРµРЅРѕР№?",
+            importPreviewDays: "Р”РЅРµР№ РІ С„Р°Р№Р»Рµ",
+            importPreviewAffected: "Р—Р°С‚СЂРѕРЅСѓС‚Рѕ РґРЅРµР№",
+            importPreviewConflicts: "РџРµСЂРµСЃРµС‡РµРЅРёР№",
+            importPreviewImportedTotal: "Р’СЂРµРјСЏ РІ С„Р°Р№Р»Рµ",
+            importPreviewResultTotal: "РС‚РѕРі РїРѕСЃР»Рµ РёРјРїРѕСЂС‚Р°",
+            importSuccessMerge: "РРјРїРѕСЂС‚ Р·Р°РІРµСЂС€РµРЅ: РґР°РЅРЅС‹Рµ РѕР±СЉРµРґРёРЅРµРЅС‹.",
+            importSuccessReplace: "РРјРїРѕСЂС‚ Р·Р°РІРµСЂС€РµРЅ: РґР°РЅРЅС‹Рµ Р·Р°РјРµРЅРµРЅС‹.",
+            updateCheckTitle: "РџСЂРѕРІРµСЂРєР° РѕР±РЅРѕРІР»РµРЅРёР№",
+            updateCheckHint: "РџСЂРѕРІРµСЂРёС‚СЊ РЅР°Р»РёС‡РёРµ РЅРѕРІРѕР№ РІРµСЂСЃРёРё РІСЂСѓС‡РЅСѓСЋ.",
+            updateCheckButton: "РџСЂРѕРІРµСЂРёС‚СЊ",
+            updateCheckCurrent: "РЈ РІР°СЃ СѓР¶Рµ РїРѕСЃР»РµРґРЅСЏСЏ РІРµСЂСЃРёСЏ.",
+            updateCheckFailed: "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ РѕР±РЅРѕРІР»РµРЅРёСЏ РїСЂСЏРјРѕ СЃРµР№С‡Р°СЃ.",
+            resetDataTitle: "РћС‡РёСЃС‚РєР° / РЎР±СЂРѕСЃ РґР°РЅРЅС‹С…",
+            resetDataHint: "Р”РµР№СЃС‚РІРёСЏ РЅРµРѕР±СЂР°С‚РёРјС‹. РџРµСЂРµРґ РїРѕР»РЅС‹Рј СЃР±СЂРѕСЃРѕРј Р»СѓС‡С€Рµ СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ РґР°РЅРЅС‹Рµ.",
+            resetToday: "РЎР±СЂРѕСЃРёС‚СЊ СЃРµРіРѕРґРЅСЏ",
+            clearHistory: "РћС‡РёСЃС‚РёС‚СЊ РёСЃС‚РѕСЂРёСЋ",
+            fullWipe: "РџРѕР»РЅС‹Р№ СЃР±СЂРѕСЃ",
+            weeklyToggle: "РќРµРґРµР»СЏ",
+            weeklyToggleTitle: "РџРѕРєР°Р·Р°С‚СЊ РЅРµРґРµР»СЊРЅСѓСЋ СЃРІРѕРґРєСѓ",
+            weeklyRangeLabel: "РџРѕСЃР»РµРґРЅРёРµ 7 РґРЅРµР№",
+            weeklySummaryTitle: "РќРµРґРµР»СЊРЅР°СЏ СЃРІРѕРґРєР°",
+            weeklyAverageLabel: "РЎСЂРµРґРЅРµРµ РІ РґРµРЅСЊ",
+            weeklyBestDayLabel: "РЎР°РјС‹Р№ Р°РєС‚РёРІРЅС‹Р№ РґРµРЅСЊ",
+            weeklyBestDayEmpty: "РќРµС‚ РґР°РЅРЅС‹С…",
+            yesterdayVsTodayTitle: "Yesterday vs Today",
+            yesterdayVsTodaySwitchTitle: "РџРµСЂРµРєР»СЋС‡РёС‚СЊ weekly section",
+            comparisonTodayLabel: "РЎРµРіРѕРґРЅСЏ",
+            comparisonYesterdayLabel: "Р’С‡РµСЂР°",
+            comparisonDeltaLabel: "Р Р°Р·РЅРёС†Р°",
+            comparisonNoYesterday: "Р’С‡РµСЂР° РґР°РЅРЅС‹С… РЅРµС‚",
+            confirmResetToday: "РЎР±СЂРѕСЃРёС‚СЊ РґР°РЅРЅС‹Рµ Р·Р° СЃРµРіРѕРґРЅСЏ? РСЃС‚РѕСЂРёСЏ РѕСЃС‚Р°РЅРµС‚СЃСЏ РЅРµС‚СЂРѕРЅСѓС‚РѕР№.",
+            confirmClearHistory: "РћС‡РёСЃС‚РёС‚СЊ РІСЃСЋ Р°СЂС…РёРІРЅСѓСЋ РёСЃС‚РѕСЂРёСЋ? Р”Р°РЅРЅС‹Рµ Р·Р° СЃРµРіРѕРґРЅСЏ РѕСЃС‚Р°РЅСѓС‚СЃСЏ.",
+            confirmFullWipe: "РџРѕР»РЅРѕСЃС‚СЊСЋ СѓРґР°Р»РёС‚СЊ РІСЃРµ РґР°РЅРЅС‹Рµ Daily Time Tracker Рё СЃР±СЂРѕСЃРёС‚СЊ РЅР°СЃС‚СЂРѕР№РєРё?",
+            updateBadge: "РћР‘РќРћР’Р›Р•РќРР•",
+            updateTitle: "Р”РѕСЃС‚СѓРїРЅРѕ РѕР±РЅРѕРІР»РµРЅРёРµ Daily Time Tracker",
+            updateSubtitle: "РџРµСЂРµР·Р°РіСЂСѓР·РёС‚Рµ Spotify РґР»СЏ РїСЂРёРјРµРЅРµРЅРёСЏ РѕР±РЅРѕРІР»РµРЅРёСЏ.",
+            updateVersionLabel: "Р’Р•Р РЎРРЇ",
+            updateBtnRestart: "РџРµСЂРµР·Р°РїСѓСЃС‚РёС‚СЊ",
+            updateBtnReleaseNotes: "Р§С‚Рѕ РЅРѕРІРѕРіРѕ",
             apiUnavailableBadge: "API",
-            apiUnavailableTitle: "Не удалось подключиться к API Daily Time Tracker",
-            apiUnavailableSubtitle: "Скрипт продолжит работать как раньше. Повторная проверка будет выполнена автоматически."
+            apiUnavailableTitle: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ Рє API Daily Time Tracker",
+            apiUnavailableSubtitle: "РЎРєСЂРёРїС‚ РїСЂРѕРґРѕР»Р¶РёС‚ СЂР°Р±РѕС‚Р°С‚СЊ РєР°Рє СЂР°РЅСЊС€Рµ. РџРѕРІС‚РѕСЂРЅР°СЏ РїСЂРѕРІРµСЂРєР° Р±СѓРґРµС‚ РІС‹РїРѕР»РЅРµРЅР° Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё."
         },
         en: {
             widgetTitle: "Click to pin statistics",
@@ -332,6 +405,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             todayLabel: "today",
             emptyState: "No daily history yet.",
             sessionsTodayTitle: "Today Sessions",
+            topTracksEmpty: "No track plays yet.",
+            topTracksToggleLabel: "Top tracks",
+            topTracksToggleHint: "Show the block with the most played tracks for the current day.",
+            topTracksCountLabel: "Show tracks",
+            topTracksCountHint: "How many top tracks to show in the summary.",
+            topTracksPlayCount: "plays",
             historyTitle: "History",
             dailyGoalLabel: "Daily goal",
             dailyGoalHint: "Goal in minutes. `0` disables the goal.",
@@ -353,6 +432,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             popupModeHint: "Compact keeps the popup shorter. Full shows all sessions, full history, and the weekly view toggle.",
             popupModeCompact: "Compact",
             popupModeFull: "Full",
+            performanceModeLabel: "Performance mode",
+            performanceModeHint: "Reduces popup and visual effect cost on weaker CPU/GPU systems.",
+            performanceModeDefault: "Default",
+            performanceModeLightweight: "Lightweight",
             pauseThresholdLabel: "Pause threshold",
             pauseThresholdHint: "How many paused seconds are allowed before the current session is closed.",
             streakShieldsLabel: "Streak shields",
@@ -408,6 +491,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             weeklyAverageLabel: "Daily average",
             weeklyBestDayLabel: "Most active day",
             weeklyBestDayEmpty: "No data",
+            yesterdayVsTodayTitle: "Yesterday vs Today",
+            yesterdayVsTodaySwitchTitle: "Switch weekly section",
+            comparisonTodayLabel: "Today",
+            comparisonYesterdayLabel: "Yesterday",
+            comparisonDeltaLabel: "Difference",
+            comparisonNoYesterday: "No data yesterday",
             confirmResetToday: "Reset today's data? History will be kept.",
             confirmClearHistory: "Clear all archived history? Today's data will be kept.",
             confirmFullWipe: "Delete all Daily Time Tracker data and reset settings?",
@@ -475,7 +564,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     checkApiAvailability();
     state.runtime.apiHealthCheckIntervalId = setInterval(checkApiAvailability, CONFIG.apiHealthCheckIntervalMs);
 
-    // ── TEMP: test streak colors ──
+    // РІвЂќР‚РІвЂќР‚ TEMP: test streak colors РІвЂќР‚РІвЂќР‚
     window.dttSetStreak = function (n) {
         state.runtime._streakTestMode = true;
         state.streak.current = Number(n) || 0;
@@ -528,10 +617,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         if (state.language === "ru") {
             const mod10 = n % 10;
             const mod100 = n % 100;
-            if (mod100 >= 11 && mod100 <= 19) return "месяцев";
-            if (mod10 === 1) return "месяц";
-            if (mod10 >= 2 && mod10 <= 4) return "месяца";
-            return "месяцев";
+            if (mod100 >= 11 && mod100 <= 19) return "РјРµСЃСЏС†РµРІ";
+            if (mod10 === 1) return "РјРµСЃСЏС†";
+            if (mod10 >= 2 && mod10 <= 4) return "РјРµСЃСЏС†Р°";
+            return "РјРµСЃСЏС†РµРІ";
         }
         return n === 1 ? "month" : "months";
     }
@@ -658,6 +747,55 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         return cloned;
     }
 
+    function getDayStartTimestamp(dateString) {
+        return new Date(`${dateString}T00:00:00`).getTime();
+    }
+
+    function normalizeTimestampForDate(value, dateString) {
+        const numericValue = Math.floor(Number(value) || 0);
+        if (!Number.isFinite(numericValue) || numericValue <= 0) {
+            return numericValue;
+        }
+
+        if (numericValue >= 100000000000) {
+            return numericValue;
+        }
+
+        if (!dateString) {
+            return numericValue * 1000;
+        }
+
+        const dayStart = getDayStartTimestamp(dateString);
+
+        if (numericValue < 172800) {
+            return dayStart + numericValue * 1000;
+        }
+
+        if (numericValue < 172800000) {
+            return dayStart + numericValue;
+        }
+
+        return numericValue * 1000;
+    }
+
+    function normalizeIntervalForDate(interval, dateString) {
+        if (!interval || typeof interval.start !== "number" || typeof interval.end !== "number") {
+            return null;
+        }
+
+        const start = normalizeTimestampForDate(interval.start, dateString);
+        const end = normalizeTimestampForDate(interval.end, dateString);
+
+        if (end <= start) {
+            return null;
+        }
+
+        return {
+            start,
+            end
+        };
+    }
+
     function createEmptyDay(date) {
         return {
             date,
@@ -667,26 +805,27 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     }
 
     function normalizeDayData(data, fallbackDate) {
+        const date = typeof data?.date === "string" ? data.date : fallbackDate;
         return {
-            date: typeof data?.date === "string" ? data.date : fallbackDate,
+            date,
             totalSeconds: Math.max(0, Math.floor(Number(data?.totalSeconds) || 0)),
             intervals: Array.isArray(data?.intervals)
-                ? data.intervals.map(normalizeInterval).filter(Boolean)
+                ? data.intervals.map((interval) => normalizeIntervalForDate(interval, date)).filter(Boolean)
                 : []
         };
     }
 
-    function normalizeStoredSessionInterval(interval) {
+    function normalizeStoredSessionInterval(interval, dateString) {
         if (Array.isArray(interval) && interval.length >= 2) {
-            const start = Math.floor(Number(interval[0]) || 0);
-            const end = Math.floor(Number(interval[1]) || 0);
+            const start = normalizeTimestampForDate(interval[0], dateString);
+            const end = normalizeTimestampForDate(interval[1], dateString);
             if (end <= start) {
                 return null;
             }
 
             const normalized = {
-                start: start * 1000,
-                end: end * 1000
+                start,
+                end
             };
             const listenedSeconds = Math.max(0, Math.floor(Number(interval[2])));
             if (Number.isFinite(listenedSeconds)) {
@@ -696,7 +835,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             return normalized;
         }
 
-        return normalizeInterval(interval);
+        return normalizeIntervalForDate(interval, dateString);
     }
 
     function serializeStoredSessionInterval(interval) {
@@ -712,12 +851,322 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     }
 
     function normalizeSessionsData(data, fallbackDate) {
+        const date = typeof data?.date === "string" ? data.date : fallbackDate;
         return {
-            date: typeof data?.date === "string" ? data.date : fallbackDate,
+            date,
             intervals: Array.isArray(data?.intervals)
-                ? data.intervals.map(normalizeStoredSessionInterval).filter(Boolean)
+                ? data.intervals.map((interval) => normalizeStoredSessionInterval(interval, date)).filter(Boolean)
                 : []
         };
+    }
+
+    function createEmptySessionTrackData(date) {
+        return {
+            date,
+            sessions: []
+        };
+    }
+
+    function normalizeSessionTrackPlay(play) {
+        const uri = typeof play?.uri === "string" ? play.uri : "";
+        const name = typeof play?.name === "string" ? play.name.trim() : "";
+        const artist = typeof play?.artist === "string" ? play.artist.trim() : "";
+        const plays = Math.max(1, Math.floor(Number(play?.plays) || 0));
+
+        if (!uri && !name) {
+            return null;
+        }
+
+        return {
+            uri,
+            name,
+            artist,
+            plays
+        };
+    }
+
+    function cloneSessionTrackPlay(play) {
+        return {
+            uri: play.uri,
+            name: play.name,
+            artist: play.artist,
+            plays: play.plays
+        };
+    }
+
+    function normalizeSessionTrackSummary(entry) {
+        if (!entry || typeof entry.start !== "number" || typeof entry.end !== "number") {
+            return null;
+        }
+
+        if (entry.end <= entry.start) {
+            return null;
+        }
+
+        return {
+            start: entry.start,
+            end: entry.end,
+            tracks: Array.isArray(entry?.tracks)
+                ? entry.tracks.map(normalizeSessionTrackPlay).filter(Boolean)
+                : []
+        };
+    }
+
+    function cloneSessionTrackSummary(entry) {
+        return {
+            start: entry.start,
+            end: entry.end,
+            tracks: entry.tracks.map(cloneSessionTrackPlay)
+        };
+    }
+
+    function normalizeSessionTrackData(data, fallbackDate) {
+        return {
+            date: typeof data?.date === "string" ? data.date : fallbackDate,
+            sessions: Array.isArray(data?.sessions)
+                ? data.sessions.map(normalizeSessionTrackSummary).filter(Boolean)
+                : []
+        };
+    }
+
+    function createLiveSession(startAt) {
+        return {
+            start: startAt,
+            listenedMs: 0,
+            lastResumedAt: startAt,
+            tracks: [],
+            lastCountedTrackKey: ""
+        };
+    }
+
+    function getLiveSessionListenedMs(now = Date.now()) {
+        if (!state.currentSession) {
+            return 0;
+        }
+
+        const listenedMs = Math.max(0, Math.floor(Number(state.currentSession.listenedMs) || 0));
+        if (typeof state.currentSession.lastResumedAt !== "number") {
+            return listenedMs;
+        }
+
+        return listenedMs + Math.max(0, now - state.currentSession.lastResumedAt);
+    }
+
+    function pauseCurrentSession(now) {
+        if (!state.currentSession || typeof state.currentSession.lastResumedAt !== "number") {
+            return;
+        }
+
+        state.currentSession.listenedMs = getLiveSessionListenedMs(now);
+        state.currentSession.lastResumedAt = null;
+    }
+
+    function resumeCurrentSession(now) {
+        if (!state.currentSession) {
+            return;
+        }
+
+        if (typeof state.currentSession.lastResumedAt !== "number") {
+            state.currentSession.lastResumedAt = now;
+        }
+    }
+
+    function buildIntervalFromCurrentSession(endAt, now = endAt) {
+        if (!state.currentSession) {
+            return null;
+        }
+
+        return normalizeInterval({
+            start: state.currentSession.start,
+            end: endAt,
+            listenedMs: getLiveSessionListenedMs(now)
+        });
+    }
+
+    function getCurrentTrackInfo() {
+        const item = Spicetify.Player.data?.item;
+        const uri = typeof item?.uri === "string" ? item.uri : "";
+        const name = typeof item?.name === "string" ? item.name.trim() : "";
+        const artist = Array.isArray(item?.artists)
+            ? item.artists
+                .map((entry) => typeof entry?.name === "string" ? entry.name.trim() : "")
+                .filter(Boolean)
+                .join(", ")
+            : "";
+
+        if (!uri && !name) {
+            return null;
+        }
+
+        return {
+            uri,
+            name,
+            artist
+        };
+    }
+
+    function getCurrentTrackProgressMs() {
+        const player = Spicetify.Player;
+        const candidateValues = [
+            typeof player?.getProgress === "function" ? player.getProgress() : null,
+            typeof player?.getProgressMs === "function" ? player.getProgressMs() : null,
+            player?.data?.progressMs,
+            player?.data?.positionAsOfTimestamp,
+            player?.progressMs
+        ];
+
+        for (const value of candidateValues) {
+            const normalized = Number(value);
+            if (Number.isFinite(normalized) && normalized >= 0) {
+                return normalized;
+            }
+        }
+
+        return null;
+    }
+
+    function getTrackSessionKey(trackInfo) {
+        if (!trackInfo) {
+            return "";
+        }
+
+        return trackInfo.uri || `${trackInfo.artist}|${trackInfo.name}`;
+    }
+
+    function resetActiveTrackRuntime() {
+        state.runtime._lastTrackUri = null;
+        state.runtime._lastTrackProgressMs = null;
+        state.runtime._activeTrackInfo = null;
+        state.runtime._activeTrackKey = "";
+        state.runtime._activeTrackListenedMs = 0;
+        state.runtime._activeTrackQualified = false;
+        state.runtime._activeTrackFinalized = false;
+    }
+
+    function primeActiveTrackCycle(trackInfo = getCurrentTrackInfo(), progressMs = getCurrentTrackProgressMs()) {
+        state.runtime._activeTrackInfo = trackInfo;
+        state.runtime._activeTrackKey = getTrackSessionKey(trackInfo);
+        state.runtime._activeTrackListenedMs = 0;
+        state.runtime._activeTrackQualified = false;
+        state.runtime._activeTrackFinalized = false;
+        state.runtime._lastTrackUri = trackInfo?.uri || null;
+        state.runtime._lastTrackProgressMs = Number.isFinite(progressMs) ? progressMs : null;
+    }
+
+    function accumulateActiveTrackListen(progressMs) {
+        if (!state.currentSession || !state.runtime._activeTrackKey || !Spicetify.Player.isPlaying()) {
+            return;
+        }
+
+        const lastProgressMs = state.runtime._lastTrackProgressMs;
+        if (!Number.isFinite(progressMs) || !Number.isFinite(lastProgressMs)) {
+            return;
+        }
+
+        const deltaMs = progressMs - lastProgressMs;
+        if (deltaMs <= 0 || deltaMs > CONFIG.tickMs * 3) {
+            return;
+        }
+
+        state.runtime._activeTrackListenedMs += deltaMs;
+        if (state.runtime._activeTrackListenedMs >= CONFIG.minTrackCountListenMs) {
+            state.runtime._activeTrackQualified = true;
+        }
+    }
+
+    function addTrackPlayToSession(session, trackInfo) {
+        if (!session || !trackInfo) {
+            return;
+        }
+
+        const existing = session.tracks.find((entry) => {
+            if (trackInfo.uri && entry.uri) {
+                return entry.uri === trackInfo.uri;
+            }
+
+            return entry.name === trackInfo.name && entry.artist === trackInfo.artist;
+        });
+
+        if (existing) {
+            existing.plays += 1;
+            if (!existing.name && trackInfo.name) {
+                existing.name = trackInfo.name;
+            }
+            if (!existing.artist && trackInfo.artist) {
+                existing.artist = trackInfo.artist;
+            }
+            return;
+        }
+
+        session.tracks.push({
+            uri: trackInfo.uri,
+            name: trackInfo.name,
+            artist: trackInfo.artist,
+            plays: 1
+        });
+    }
+
+    function finalizeActiveTrackPlayInSession() {
+        if (!state.currentSession || !state.runtime._activeTrackQualified || state.runtime._activeTrackFinalized) {
+            return;
+        }
+
+        const trackInfo = state.runtime._activeTrackInfo;
+        if (!trackInfo) {
+            return;
+        }
+
+        const trackKey = state.runtime._activeTrackKey || getTrackSessionKey(trackInfo);
+        if (!trackKey) {
+            return;
+        }
+
+        addTrackPlayToSession(state.currentSession, trackInfo);
+        state.currentSession.lastCountedTrackKey = trackKey;
+        state.runtime._activeTrackFinalized = true;
+    }
+
+    function createPersistedSessionTrackSnapshot(now = Date.now()) {
+        const sessions = state.sessionTrackData.sessions.map(cloneSessionTrackSummary);
+        const liveInterval = getVisibleSessionInterval(now);
+
+        if (liveInterval && state.currentSession) {
+            sessions.push({
+                start: liveInterval.start,
+                end: liveInterval.end,
+                tracks: state.currentSession.tracks.map(cloneSessionTrackPlay)
+            });
+        }
+
+        return {
+            date: state.day.date,
+            sessions
+        };
+    }
+
+    function saveSessionTrackData(now = Date.now()) {
+        const snapshot = createPersistedSessionTrackSnapshot(now);
+        Spicetify.LocalStorage.set(
+            CONFIG.sessionTrackCountsKey,
+            JSON.stringify(snapshot)
+        );
+    }
+
+    function loadTodaySessionTrackData(date = getTodayString()) {
+        const saved = safeParse(Spicetify.LocalStorage.get(CONFIG.sessionTrackCountsKey), null);
+        const normalized = normalizeSessionTrackData(saved, date);
+
+        if (normalized.date !== date) {
+            const empty = createEmptySessionTrackData(date);
+            Spicetify.LocalStorage.set(CONFIG.sessionTrackCountsKey, JSON.stringify(empty));
+            return empty;
+        }
+
+        if (!saved || normalized.date !== saved?.date || normalized.sessions.length !== (Array.isArray(saved?.sessions) ? saved.sessions.length : 0)) {
+            Spicetify.LocalStorage.set(CONFIG.sessionTrackCountsKey, JSON.stringify(normalized));
+        }
+
+        return normalized;
     }
 
     function normalizeHistoryEntry(entry) {
@@ -801,6 +1250,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         return Spicetify.LocalStorage.get(CONFIG.popupModeKey) === "full" ? "full" : "compact";
     }
 
+    function loadPerformanceMode() {
+        return Spicetify.LocalStorage.get(CONFIG.performanceModeKey) === "lightweight"
+            ? "lightweight"
+            : "default";
+    }
+
     function normalizePauseSeconds(value) {
         const normalized = Math.floor(Number(value) || CONFIG.defaultPauseSeconds);
         return [15, 30, 60, 120].includes(normalized) ? normalized : CONFIG.defaultPauseSeconds;
@@ -812,6 +1267,19 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
     function loadDailyGoalSeconds() {
         return normalizeDailyGoalSeconds(Spicetify.LocalStorage.get(CONFIG.dailyGoalKey));
+    }
+
+    function loadTopTracksVisible() {
+        return Spicetify.LocalStorage.get(CONFIG.topTracksVisibleKey) === "1";
+    }
+
+    function normalizeTopTracksDisplayCount(value) {
+        const normalized = Math.floor(Number(value) || 1);
+        return [1, 2, 3].includes(normalized) ? normalized : 1;
+    }
+
+    function loadTopTracksDisplayCount() {
+        return normalizeTopTracksDisplayCount(Spicetify.LocalStorage.get(CONFIG.topTracksDisplayCountKey));
     }
 
     function normalizeKeepPeriod(period) {
@@ -834,7 +1302,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         return {
             keepStreakEnabled: Boolean(data?.keepStreakEnabled),
-            keepPeriods
+            keepPeriods,
+            keepFrozenCurrent: Math.max(0, Math.floor(Number(data?.keepFrozenCurrent) || 0))
         };
     }
 
@@ -895,12 +1364,24 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         Spicetify.LocalStorage.set(CONFIG.popupModeKey, state.popupMode);
     }
 
+    function savePerformanceMode() {
+        Spicetify.LocalStorage.set(CONFIG.performanceModeKey, state.performanceMode);
+    }
+
     function savePauseSeconds() {
         Spicetify.LocalStorage.set(CONFIG.pauseThresholdKey, String(state.pauseSeconds));
     }
 
     function saveDailyGoalSeconds() {
         Spicetify.LocalStorage.set(CONFIG.dailyGoalKey, String(state.dailyGoalSeconds));
+    }
+
+    function saveTopTracksVisible() {
+        Spicetify.LocalStorage.set(CONFIG.topTracksVisibleKey, state.topTracksVisible ? "1" : "0");
+    }
+
+    function saveTopTracksDisplayCount() {
+        Spicetify.LocalStorage.set(CONFIG.topTracksDisplayCountKey, String(state.topTracksDisplayCount));
     }
 
     function saveStreakControlData() {
@@ -1207,6 +1688,28 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         }
     }
 
+    function applyPerformanceMode(nextMode) {
+        const normalized = nextMode === "lightweight" ? "lightweight" : "default";
+        if (normalized === state.performanceMode) {
+            return;
+        }
+
+        state.performanceMode = normalized;
+        savePerformanceMode();
+        syncPerformanceModeClass();
+        state.popup.lastSummarySignature = "";
+        state.popup.lastTopTracksSignature = "";
+        state.popup.lastIntervalsSignature = "";
+        state.popup.lastWeeklySignature = "";
+        state.popup.lastHistorySignature = "";
+        state.ui.lastWidgetSignature = "";
+        if (state.popup.node) {
+            updatePopupStaticTextV2();
+        }
+        syncVisibleUI();
+        schedulePopupPosition(true);
+    }
+
     function applyPauseSeconds(nextValue) {
         const normalized = normalizePauseSeconds(nextValue);
         if (normalized === state.pauseSeconds) {
@@ -1243,6 +1746,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         if (normalized) {
             nextControl.keepPeriods.push({ start: today, end: "" });
+            nextControl.keepFrozenCurrent = state.streak.current;
         } else {
             for (let i = nextControl.keepPeriods.length - 1; i >= 0; i--) {
                 if (!nextControl.keepPeriods[i].end) {
@@ -1255,6 +1759,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                     break;
                 }
             }
+            nextControl.keepFrozenCurrent = 0;
         }
 
         nextControl.keepStreakEnabled = normalized;
@@ -1356,6 +1861,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         }
 
         const currentMonthKey = today.slice(0, 7);
+        if (state.streakControl.keepStreakEnabled && isDateProtectedByKeep(today)) {
+            current = Math.max(current, state.streakControl.keepFrozenCurrent || 0);
+        }
         state.streak.current = current;
         state.streak.shieldsUsedByMonth = shieldsUsedByMonth;
         state.streak.shieldsUsedCurrentMonth = shieldsUsedByMonth[currentMonthKey] || 0;
@@ -1370,6 +1878,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     function getRemainingStreakShieldsText() {
         const remaining = Math.max(0, CONFIG.streakShieldsPerMonth - (state.streak.shieldsUsedCurrentMonth || 0));
         return `${remaining}/${CONFIG.streakShieldsPerMonth}`;
+    }
+
+    function formatSignedDuration(totalSeconds) {
+        const normalized = Math.max(0, Math.floor(Math.abs(Number(totalSeconds) || 0)));
+        const prefix = totalSeconds > 0 ? "+" : totalSeconds < 0 ? "-" : "";
+        return `${prefix}${formatDuration(normalized)}`;
     }
 
     function setSettingsToggleButtonState(button, isActive) {
@@ -1428,7 +1942,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             );
         }
         if (state.popup.settingsKeepStreakPreviewNode) {
-            state.popup.settingsKeepStreakPreviewNode.textContent = `${t("streakShieldsRemaining")}: ${getRemainingStreakShieldsText()}`;
+            state.popup.settingsKeepStreakPreviewNode.textContent = "";
+            state.popup.settingsKeepStreakPreviewNode.hidden = true;
         }
     }
 
@@ -1487,7 +2002,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         }
     }
 
-    // ── Update check ─────────────────────────────────────
+    // РІвЂќР‚РІвЂќР‚ Update check РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 
     function loadStoredVersion() {
         return Spicetify.LocalStorage.get(CONFIG.versionKey) || "";
@@ -1623,7 +2138,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         const versionValue = document.createElement("span");
         versionValue.className = "dtt-update-version-value";
-        versionValue.textContent = `${VERSION}  →  ${latestVersion}`;
+        versionValue.textContent = `${VERSION} -> ${latestVersion}`;
 
         versionBlock.appendChild(versionLabel);
         versionBlock.appendChild(versionValue);
@@ -1838,7 +2353,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         return getActiveStreakTiers()
             .filter((tier) => !tier.hidden)
             .map((tier) => `${tier.min}+`)
-            .join(" • ");
+            .join(" вЂў ");
     }
 
     function getStreakColor() {
@@ -1864,58 +2379,6 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const storedTotal = Math.max(0, Math.floor(Number(day?.totalSeconds) || 0));
         const intervalsTotal = getIntervalsTotalSeconds(Array.isArray(day?.intervals) ? day.intervals : []);
         return Math.max(storedTotal, intervalsTotal);
-    }
-
-    function createLiveSession(startAt) {
-        return {
-            start: startAt,
-            listenedMs: 0,
-            lastResumedAt: startAt
-        };
-    }
-
-    function getLiveSessionListenedMs(now = Date.now()) {
-        if (!state.currentSession) {
-            return 0;
-        }
-
-        const listenedMs = Math.max(0, Math.floor(Number(state.currentSession.listenedMs) || 0));
-        if (typeof state.currentSession.lastResumedAt !== "number") {
-            return listenedMs;
-        }
-
-        return listenedMs + Math.max(0, now - state.currentSession.lastResumedAt);
-    }
-
-    function pauseCurrentSession(now) {
-        if (!state.currentSession || typeof state.currentSession.lastResumedAt !== "number") {
-            return;
-        }
-
-        state.currentSession.listenedMs = getLiveSessionListenedMs(now);
-        state.currentSession.lastResumedAt = null;
-    }
-
-    function resumeCurrentSession(now) {
-        if (!state.currentSession) {
-            return;
-        }
-
-        if (typeof state.currentSession.lastResumedAt !== "number") {
-            state.currentSession.lastResumedAt = now;
-        }
-    }
-
-    function buildIntervalFromCurrentSession(endAt, now = endAt) {
-        if (!state.currentSession) {
-            return null;
-        }
-
-        return normalizeInterval({
-            start: state.currentSession.start,
-            end: endAt,
-            listenedMs: getLiveSessionListenedMs(now)
-        });
     }
 
     function getVisibleSessionInterval(now = Date.now()) {
@@ -1972,9 +2435,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                     .filter(Boolean)
             })
         );
+        saveSessionTrackData(now);
     }
 
-    // ── Export helpers ────────────────────────────────────
+    // РІвЂќР‚РІвЂќР‚ Export helpers РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
     function getExportData() {
         const history = readHistory();
         const todayTotal = getComputedDayTotalSeconds();
@@ -2150,6 +2614,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         saveHistory(nextHistory);
         state.runtime._streakTestMode = false;
         state.day = nextToday;
+        state.sessionTrackData = createEmptySessionTrackData(nextToday.date);
         state.currentSession = null;
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
@@ -2255,11 +2720,16 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         state.runtime._streakTestMode = false;
         state.day = createEmptyDay(getTodayString());
+        state.sessionTrackData = createEmptySessionTrackData(state.day.date);
         state.currentSession = keepCurrentSession && Spicetify.Player.isPlaying()
-            ? { start: now, end: null }
+            ? createLiveSession(now)
             : null;
+        resetActiveTrackRuntime();
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
+        if (state.currentSession) {
+            primeActiveTrackCycle();
+        }
         saveTodayData(now);
         computeStreak();
         syncVisibleUI(now);
@@ -2288,9 +2758,13 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         clearStoredValue(CONFIG.retentionKey);
         clearStoredValue(CONFIG.retentionForeverKey);
         clearStoredValue(CONFIG.popupModeKey);
+        clearStoredValue(CONFIG.performanceModeKey);
         clearStoredValue(CONFIG.pauseThresholdKey);
         clearStoredValue(CONFIG.longStreakProgressionKey);
         clearStoredValue(CONFIG.badgeVisibilityKey);
+        clearStoredValue(CONFIG.sessionTrackCountsKey);
+        clearStoredValue(CONFIG.topTracksVisibleKey);
+        clearStoredValue(CONFIG.topTracksDisplayCountKey);
         clearStoredValue(CONFIG.streakKey);
         clearStoredValue(CONFIG.streakControlKey);
         clearStoredValue(CONFIG.channelKey);
@@ -2301,9 +2775,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.historyRetentionMonths = CONFIG.historyRetentionMonths;
         state.historyRetentionForever = false;
         state.popupMode = "compact";
+        state.performanceMode = "default";
         state.pauseSeconds = CONFIG.defaultPauseSeconds;
         state.longStreakProgressionEnabled = false;
         state.badgeVisible = true;
+        state.topTracksVisible = false;
+        state.topTracksDisplayCount = 1;
         state.streak = normalizeStreakData(null);
         state.streakControl = normalizeStreakControlData(null);
 
@@ -2361,6 +2838,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                     intervals: []
                 })
             );
+            Spicetify.LocalStorage.set(
+                CONFIG.sessionTrackCountsKey,
+                JSON.stringify(createEmptySessionTrackData(today))
+            );
             return freshDay;
         }
 
@@ -2405,6 +2886,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     function startSession(startAt) {
         if (!state.currentSession) {
             state.currentSession = createLiveSession(startAt);
+            primeActiveTrackCycle();
             return;
         }
 
@@ -2413,15 +2895,22 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
     function closeSession(endAt) {
         if (!state.currentSession) return;
-
         pauseCurrentSession(endAt);
+        finalizeActiveTrackPlayInSession();
+
         const interval = buildIntervalFromCurrentSession(endAt);
 
         if (interval) {
             state.day.intervals.push(interval);
+            state.sessionTrackData.sessions.push({
+                start: interval.start,
+                end: interval.end,
+                tracks: state.currentSession.tracks.map(cloneSessionTrackPlay)
+            });
         }
 
         state.currentSession = null;
+        resetActiveTrackRuntime();
     }
 
     function rolloverDayIfNeeded() {
@@ -2434,6 +2923,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         const wasSessionActive = Boolean(state.currentSession && typeof state.currentSession.lastResumedAt === "number");
         if (state.currentSession) {
+            finalizeActiveTrackPlayInSession();
             const midnight = getMidnightTimestamp(state.day.date);
             pauseCurrentSession(Math.min(Date.now(), midnight));
             const cappedSession = buildIntervalFromCurrentSession(
@@ -2442,14 +2932,24 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
             if (cappedSession) {
                 state.day.intervals.push(cappedSession);
+                state.sessionTrackData.sessions.push({
+                    start: cappedSession.start,
+                    end: cappedSession.end,
+                    tracks: state.currentSession.tracks.map(cloneSessionTrackPlay)
+                });
             }
         }
 
         archiveDay(state.day);
         state.day = createEmptyDay(today);
+        state.sessionTrackData = createEmptySessionTrackData(today);
         state.currentSession = wasSessionActive ? createLiveSession(getMidnightTimestamp(state.day.date)) : null;
+        resetActiveTrackRuntime();
         state.idleStartedAt = null;
         state.silenceSeconds = 0;
+        if (state.currentSession) {
+            primeActiveTrackCycle();
+        }
         saveTodayData();
     }
 
@@ -2469,7 +2969,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const style = document.createElement("style");
         style.id = "dtt-styles";
         style.textContent = `
-            /* ── Widget pill ─────────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Widget pill РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             #dtt-widget {
                 display: inline-flex;
                 align-items: center;
@@ -2508,7 +3008,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 box-shadow: none;
             }
 
-            /* ── Fire icon (popup) ─────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Fire icon (popup) РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-fire-wrap {
                 display: inline-flex;
                 align-items: center;
@@ -2571,7 +3071,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 box-shadow: none;
             }
 
-            /* ── Timer text ──────────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Timer text РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             #dtt-time {
                 min-width: 72px;
                 text-align: center;
@@ -2613,7 +3113,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 color: #1ed760;
             }
 
-            /* ── Popup container ─────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Popup container РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             #dtt-hover-popup {
                 position: fixed;
                 z-index: 10000;
@@ -2662,7 +3162,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 max-height: min(76vh, 780px);
             }
 
-            /* ── Header block ────────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Header block РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-popup-header {
                 display: flex;
                 justify-content: space-between;
@@ -2714,7 +3214,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 flex-shrink: 0;
             }
 
-            /* ── Language switcher ───────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Language switcher РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-language-switcher {
                 display: inline-flex;
                 align-items: center;
@@ -2787,7 +3287,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 margin-top: 10px;
             }
 
-            /* ── Hint line ───────────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Hint line РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-popup-hint {
                 color: #555;
                 font-size: 11px;
@@ -2841,7 +3341,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 color: #1ed760;
             }
 
-            /* ── Retention control ───────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Retention control РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-retention-control {
                 display: inline-flex;
                 align-items: center;
@@ -2871,7 +3371,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 color: #fff;
             }
 
-            /* ── Summary card ────────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Summary card РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-popup-summary {
                 display: flex;
                 flex-direction: column;
@@ -2962,7 +3462,35 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 transition: width 0.18s ease;
             }
 
-            /* ── Sections wrapper (scrollable body) ──────────── */
+            .dtt-top-tracks-summary {
+                width: min(100%, 320px);
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                margin-top: 10px;
+            }
+
+            .dtt-top-tracks-summary[hidden] {
+                display: none;
+            }
+
+            .dtt-top-tracks-list {
+                width: 100%;
+            }
+
+            .dtt-top-tracks-list .dtt-interval-item {
+                padding: 6px 0;
+            }
+
+            .dtt-top-tracks-list .dtt-interval-range {
+                font-size: 11px;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-top-tracks-list .dtt-interval-range {
+                font-size: 10px;
+            }
+
+            /* РІвЂќР‚РІвЂќР‚ Sections wrapper (scrollable body) РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-popup-section {
                 display: flex;
                 flex-direction: column;
@@ -2986,7 +3514,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 display: none;
             }
 
-            /* ── Section headers ─────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Section headers РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-popup-section-title {
                 font-size: 10.5px;
                 font-weight: 700;
@@ -3023,7 +3551,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 min-height: 0;
             }
 
-            /* ── Sessions list ───────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Sessions list РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-intervals-list {
                 overflow-y: auto;
                 min-height: 0;
@@ -3051,7 +3579,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 border-radius: 999px;
             }
 
-            /* ── Toggle button ───────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Toggle button РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-today-sessions-toggle {
                 display: inline-flex;
                 align-items: center;
@@ -3083,11 +3611,11 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
             }
 
-            /* ── Row items ───────────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Row items РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-interval-item {
                 display: flex;
                 justify-content: space-between;
-                align-items: center;
+                align-items: flex-start;
                 gap: 16px;
                 padding: 8px 0;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.045);
@@ -3113,8 +3641,29 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 font-weight: 500;
             }
 
+            .dtt-interval-main {
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+                flex: 1;
+            }
+
+            .dtt-interval-details {
+                color: #7e7e7e;
+                font-size: 11px;
+                line-height: 1.35;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
             #dtt-hover-popup.dtt-popup-mode-compact .dtt-interval-range {
                 font-size: 12px;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-interval-details {
+                font-size: 10px;
             }
 
             .dtt-interval-duration {
@@ -3137,7 +3686,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 color: #1ed760;
             }
 
-            /* ── Empty state ─────────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Empty state РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-empty-state {
                 color: #3a3a3a;
                 padding: 10px 0 6px;
@@ -3157,9 +3706,31 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 margin-bottom: 12px;
             }
 
+            .dtt-weekly-stats[hidden],
+            .dtt-weekly-bars[hidden] {
+                display: none !important;
+            }
+
+            .dtt-weekly-detail-toggle {
+                margin-left: auto;
+            }
+
+            .dtt-weekly-detail-toggle svg {
+                width: 14px;
+                height: 14px;
+            }
+
+            .dtt-weekly-stats.dtt-weekly-compare {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
             #dtt-hover-popup.dtt-popup-mode-compact .dtt-weekly-stats {
                 gap: 8px;
                 margin-bottom: 10px;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-weekly-stats.dtt-weekly-compare {
+                grid-template-columns: 1fr;
             }
 
             .dtt-weekly-stat {
@@ -3248,7 +3819,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 font-size: 10px;
             }
 
-            /* ── Settings gear button ────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Settings gear button РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-settings-gear {
                 display: inline-flex;
                 align-items: center;
@@ -3290,7 +3861,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 height: 14px;
             }
 
-            /* ── Settings back button ────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Settings back button РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-settings-back {
                 display: inline-flex;
                 align-items: center;
@@ -3315,7 +3886,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 height: 12px;
             }
 
-            /* ── Settings panel ──────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Settings panel РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-popup-main {
                 display: flex;
                 flex-direction: column;
@@ -3347,13 +3918,17 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 display: flex;
             }
 
-            /* ── Settings rows ───────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Settings rows РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-settings-row {
                 display: flex;
                 flex-direction: column;
                 gap: 10px;
                 padding: 14px 18px;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+
+            .dtt-settings-row[hidden] {
+                display: none;
             }
 
             #dtt-hover-popup.dtt-popup-mode-compact .dtt-settings-row {
@@ -3533,7 +4108,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 color: #fecaca;
             }
 
-            /* ── Retention value display ─────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Retention value display РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-retention-suffix {
                 font-size: 13px;
                 font-weight: 500;
@@ -3541,7 +4116,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 white-space: nowrap;
             }
 
-            /* ── Badge pill ──────────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Badge pill РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             .dtt-badge-pill {
                 display: inline-flex;
                 align-items: center;
@@ -3616,7 +4191,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 display: none;
             }
 
-            /* ── Update modal ────────────────────────────── */
+            /* РІвЂќР‚РІвЂќР‚ Update modal РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
             #dtt-update-overlay {
                 position: fixed;
                 inset: 0;
@@ -3823,6 +4398,24 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             .dtt-update-status-toast-close:hover {
                 color: #ffffff;
             }
+
+            #dtt-widget.dtt-performance-lightweight,
+            #dtt-hover-popup.dtt-performance-lightweight {
+                backdrop-filter: none !important;
+            }
+
+            #dtt-hover-popup.dtt-performance-lightweight,
+            #dtt-hover-popup.dtt-performance-lightweight * {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+
+            #dtt-hover-popup.dtt-performance-lightweight .dtt-fire-glow,
+            #dtt-hover-popup.dtt-performance-lightweight .is-rainbow {
+                filter: none !important;
+                box-shadow: none !important;
+                text-shadow: none !important;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -3841,9 +4434,24 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.ui.widget = widget;
         state.ui.timeNode = widget.querySelector("#dtt-time");
         state.ui.goalNode = widget.querySelector("#dtt-goal");
+        syncPerformanceModeClass();
     }
 
     function updateWidgetUI(totalSeconds = getWidgetTotalSeconds()) {
+        const goal = getDailyGoalProgress(totalSeconds);
+        const widgetSignature = [
+            state.language,
+            totalSeconds,
+            goal.enabled ? 1 : 0,
+            goal.percentage,
+            goal.complete ? 1 : 0,
+            state.performanceMode
+        ].join("|");
+
+        if (widgetSignature === state.ui.lastWidgetSignature) {
+            return;
+        }
+
         if (state.ui.widget) {
             state.ui.widget.title = t("widgetTitle");
         }
@@ -3851,11 +4459,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.ui.timeNode.textContent = formatDuration(totalSeconds);
         }
         if (state.ui.goalNode) {
-            const goal = getDailyGoalProgress(totalSeconds);
             state.ui.goalNode.hidden = !goal.enabled;
             state.ui.goalNode.textContent = `${Math.max(0, Math.min(999, goal.percentage))}%`;
             state.ui.goalNode.classList.toggle("is-complete", goal.complete);
         }
+        syncPerformanceModeClass();
+        state.ui.lastWidgetSignature = widgetSignature;
     }
 
     function updatePopupFireIcon() {
@@ -3875,7 +4484,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const isStale = isStreakAwaitingRefresh();
         fireNode.innerHTML = createFireSvg(colors);
         fireNode.classList.toggle("is-stale", isStale);
-        fireNode.classList.toggle("dtt-fire-glow", !isStale && s >= 3);
+        fireNode.classList.toggle("dtt-fire-glow", !isStale && s >= 3 && !isLightweightMode());
         fireNode.style.setProperty("--dtt-fire-glow", colors.glow);
         countNode.textContent = String(s);
         countNode.style.color = isStale ? "rgba(191, 191, 191, 0.96)" : colors.text;
@@ -3963,15 +4572,88 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         };
     }
 
-    function getTodayIntervalRows(now = Date.now()) {
-        return getVisibleIntervals(now)
-            .slice()
-            .sort((a, b) => b.start - a.start)
-            .map((interval) => ({
-                key: `${interval.start}-${interval.end}`,
-                label: `${formatClockTime(interval.start)} - ${formatClockTime(interval.end)}`,
-                duration: formatDuration(getIntervalDurationSeconds(interval))
+    function getYesterdayVsTodayData(todayTotalSeconds = getComputedDayTotalSeconds()) {
+        const yesterdayDate = shiftDateString(state.day.date, -1);
+        const yesterdayEntry = normalizeHistoryEntry(readHistory()[yesterdayDate]);
+        const yesterdaySeconds = yesterdayEntry.totalSeconds;
+        const deltaSeconds = todayTotalSeconds - yesterdaySeconds;
+
+        return {
+            todaySeconds: todayTotalSeconds,
+            yesterdaySeconds,
+            deltaSeconds
+        };
+    }
+
+    function getTodayTopTrackRows() {
+        const mergedTracks = new Map();
+        const allSessions = state.sessionTrackData.sessions.slice();
+
+        if (state.currentSession?.tracks?.length) {
+            allSessions.push({
+                tracks: state.currentSession.tracks.map(cloneSessionTrackPlay)
+            });
+        }
+
+        for (const session of allSessions) {
+            for (const track of session.tracks || []) {
+                const key = track.uri || `${track.artist}|${track.name}`;
+                if (!key) {
+                    continue;
+                }
+
+                const existing = mergedTracks.get(key);
+                if (existing) {
+                    existing.plays += Math.max(1, track.plays);
+                    if (!existing.name && track.name) {
+                        existing.name = track.name;
+                    }
+                    if (!existing.artist && track.artist) {
+                        existing.artist = track.artist;
+                    }
+                    continue;
+                }
+
+                mergedTracks.set(key, {
+                    uri: track.uri,
+                    name: track.name,
+                    artist: track.artist,
+                    plays: Math.max(1, track.plays)
+                });
+            }
+        }
+
+        return Array.from(mergedTracks.values())
+            .sort((a, b) => b.plays - a.plays || (a.name || "").localeCompare(b.name || ""))
+            .slice(0, state.topTracksDisplayCount)
+            .map((track, index) => ({
+                key: track.uri || `${track.artist}-${track.name}-${index}`,
+                label: track.artist ? `${track.name || "Track"} - ${track.artist}` : (track.name || "Track"),
+                duration: `${track.plays} ${t("topTracksPlayCount")}`
             }));
+    }
+
+    function getTodayIntervalRows(now = Date.now()) {
+        const rows = state.day.intervals.map((interval) => ({
+            key: `${interval.start}-${interval.end}`,
+            label: `${formatClockTime(interval.start)} - ${formatClockTime(interval.end)}`,
+            duration: formatDuration(getIntervalDurationSeconds(interval))
+        }));
+        const liveInterval = getVisibleSessionInterval(now);
+
+        if (liveInterval && state.currentSession) {
+            rows.push({
+                key: `${liveInterval.start}-${liveInterval.end}`,
+                label: `${formatClockTime(liveInterval.start)} - ${formatClockTime(liveInterval.end)}`,
+                duration: formatDuration(getIntervalDurationSeconds(liveInterval))
+            });
+        }
+
+        return rows.sort((a, b) => {
+            const leftStart = Number(a.key?.split("-")[0] || 0);
+            const rightStart = Number(b.key?.split("-")[0] || 0);
+            return rightStart - leftStart;
+        });
     }
 
     function getDisplayedTodayIntervalRows(todayIntervalRows) {
@@ -4074,7 +4756,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     function buildPopupContent(root) {
         root.innerHTML = "";
 
-        // ── Header (always visible) ──────────────────────────
+        // РІвЂќР‚РІвЂќР‚ Header (always visible) РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
         const header = document.createElement("div");
         header.className = "dtt-popup-header";
 
@@ -4129,7 +4811,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             updatePopupStaticTextV2();
             updatePopupDynamicContentV2();
             updatePopupHistoryV2();
-            positionPopup();
+            schedulePopupPosition(true);
         });
 
         headerRight.append(fireWrap, hint, weeklyToggleBtn, gearBtn);
@@ -4154,7 +4836,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         header.append(titleWrap, headerRight);
         root.appendChild(header);
 
-        // ── Main content panel ───────────────────────────────
+        // РІвЂќР‚РІвЂќР‚ Main content panel РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
         const mainPanel = document.createElement("div");
         mainPanel.className = "dtt-popup-main";
 
@@ -4178,7 +4860,13 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         goalProgress.appendChild(goalProgressBar);
         goalHead.append(goalLabel, goalValue);
         goalWrap.append(goalHead, goalProgress);
-        summary.append(dateNode, totalNode, goalWrap);
+        const topTracksWrap = document.createElement("div");
+        topTracksWrap.className = "dtt-top-tracks-summary";
+        topTracksWrap.hidden = true;
+        const topTracksList = document.createElement("div");
+        topTracksList.className = "dtt-top-tracks-list";
+        topTracksWrap.appendChild(topTracksList);
+        summary.append(dateNode, totalNode, goalWrap, topTracksWrap);
 
         mainPanel.appendChild(summary);
 
@@ -4236,7 +4924,26 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         weeklySection.className = "dtt-popup-section dtt-weekly-section";
         weeklySection.hidden = true;
         const weeklyHeading = document.createElement("div");
-        weeklyHeading.className = "dtt-popup-section-title";
+        weeklyHeading.className = "dtt-popup-section-heading";
+        const weeklyHeadingTitle = document.createElement("div");
+        weeklyHeadingTitle.className = "dtt-popup-section-title";
+        const weeklyDetailSwitch = document.createElement("button");
+        weeklyDetailSwitch.type = "button";
+        weeklyDetailSwitch.className = "dtt-today-sessions-toggle dtt-weekly-detail-toggle";
+        weeklyDetailSwitch.innerHTML = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M8 7H17V16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M17 7L7 17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>`;
+        weeklyDetailSwitch.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            state.popup.weeklyDetailMode = state.popup.weeklyDetailMode === "summary" ? "compare" : "summary";
+            state.popup.lastWeeklySignature = "";
+            updatePopupStaticTextV2();
+            updatePopupDynamicContentV2();
+            schedulePopupPosition(true);
+        });
+        weeklyHeading.append(weeklyHeadingTitle, weeklyDetailSwitch);
         const weeklyStats = document.createElement("div");
         weeklyStats.className = "dtt-weekly-stats";
         const weeklyAverageCard = document.createElement("div");
@@ -4256,12 +4963,37 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         weeklyStats.append(weeklyAverageCard, weeklyBestDayCard);
         const weeklyBars = document.createElement("div");
         weeklyBars.className = "dtt-weekly-bars";
-        weeklySection.append(weeklyHeading, weeklyStats, weeklyBars);
+        const weeklyCompare = document.createElement("div");
+        weeklyCompare.className = "dtt-weekly-stats dtt-weekly-compare";
+        weeklyCompare.hidden = true;
+        const weeklyCompareTodayCard = document.createElement("div");
+        weeklyCompareTodayCard.className = "dtt-weekly-stat";
+        const weeklyCompareTodayLabel = document.createElement("div");
+        weeklyCompareTodayLabel.className = "dtt-weekly-stat-label";
+        const weeklyCompareTodayValue = document.createElement("div");
+        weeklyCompareTodayValue.className = "dtt-weekly-stat-value";
+        weeklyCompareTodayCard.append(weeklyCompareTodayLabel, weeklyCompareTodayValue);
+        const weeklyCompareYesterdayCard = document.createElement("div");
+        weeklyCompareYesterdayCard.className = "dtt-weekly-stat";
+        const weeklyCompareYesterdayLabel = document.createElement("div");
+        weeklyCompareYesterdayLabel.className = "dtt-weekly-stat-label";
+        const weeklyCompareYesterdayValue = document.createElement("div");
+        weeklyCompareYesterdayValue.className = "dtt-weekly-stat-value";
+        weeklyCompareYesterdayCard.append(weeklyCompareYesterdayLabel, weeklyCompareYesterdayValue);
+        const weeklyCompareDeltaCard = document.createElement("div");
+        weeklyCompareDeltaCard.className = "dtt-weekly-stat";
+        const weeklyCompareDeltaLabel = document.createElement("div");
+        weeklyCompareDeltaLabel.className = "dtt-weekly-stat-label";
+        const weeklyCompareDeltaValue = document.createElement("div");
+        weeklyCompareDeltaValue.className = "dtt-weekly-stat-value";
+        weeklyCompareDeltaCard.append(weeklyCompareDeltaLabel, weeklyCompareDeltaValue);
+        weeklyCompare.append(weeklyCompareTodayCard, weeklyCompareYesterdayCard, weeklyCompareDeltaCard);
+        weeklySection.append(weeklyHeading, weeklyStats, weeklyCompare, weeklyBars);
         mainPanel.appendChild(weeklySection);
 
         root.appendChild(mainPanel);
 
-        // ── Settings panel ───────────────────────────────────
+        // РІвЂќР‚РІвЂќР‚ Settings panel РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
         const settingsPanel = document.createElement("div");
         settingsPanel.className = "dtt-popup-settings";
 
@@ -4396,6 +5128,68 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         badgeRow.append(badgeTitle, badgeContent);
         settingsPanel.appendChild(badgeRow);
 
+        const topTracksRow = document.createElement("div");
+        topTracksRow.className = "dtt-settings-row";
+        const topTracksTitleNode = document.createElement("div");
+        topTracksTitleNode.className = "dtt-settings-row-label";
+        const topTracksContent = document.createElement("div");
+        topTracksContent.className = "dtt-settings-row-content is-between";
+        const topTracksHint = document.createElement("div");
+        topTracksHint.className = "dtt-settings-row-hint";
+        topTracksHint.textContent = t("topTracksToggleHint");
+        const topTracksInput = document.createElement("button");
+        topTracksInput.type = "button";
+        topTracksInput.className = "dtt-language-button dtt-settings-toggle-button";
+        setSettingsToggleButtonState(topTracksInput, state.topTracksVisible);
+        topTracksInput.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            state.topTracksVisible = !state.topTracksVisible;
+            saveTopTracksVisible();
+            updatePopupStaticTextV2();
+            updatePopupDynamicContentV2();
+        });
+        topTracksContent.append(topTracksHint, topTracksInput);
+        topTracksRow.append(topTracksTitleNode, topTracksContent);
+        settingsPanel.appendChild(topTracksRow);
+
+        const topTracksCountRow = document.createElement("div");
+        topTracksCountRow.className = "dtt-settings-row";
+        topTracksCountRow.hidden = !state.topTracksVisible;
+        const topTracksCountTitle = document.createElement("div");
+        topTracksCountTitle.className = "dtt-settings-row-label";
+        const topTracksCountContent = document.createElement("div");
+        topTracksCountContent.className = "dtt-settings-row-content";
+        const topTracksCountHint = document.createElement("div");
+        topTracksCountHint.className = "dtt-settings-row-hint";
+        topTracksCountHint.textContent = t("topTracksCountHint");
+        const topTracksCountSwitcher = document.createElement("div");
+        topTracksCountSwitcher.className = "dtt-language-switcher";
+        state.popup.settingsTopTracksCountButtons = [];
+        for (const count of [1, 2, 3]) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `dtt-language-button${state.topTracksDisplayCount === count ? " is-active" : ""}`;
+            button.dataset.topTracksCount = String(count);
+            button.textContent = String(count);
+            button.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (state.topTracksDisplayCount === count) {
+                    return;
+                }
+                state.topTracksDisplayCount = count;
+                saveTopTracksDisplayCount();
+                updatePopupStaticTextV2();
+                updatePopupDynamicContentV2();
+            });
+            topTracksCountSwitcher.appendChild(button);
+            state.popup.settingsTopTracksCountButtons.push(button);
+        }
+        topTracksCountContent.append(topTracksCountHint, topTracksCountSwitcher);
+        topTracksCountRow.append(topTracksCountTitle, topTracksCountContent);
+        settingsPanel.appendChild(topTracksCountRow);
+
         const popupModeRow = document.createElement("div");
         popupModeRow.className = "dtt-settings-row";
         const popupModeTitle = document.createElement("div");
@@ -4424,7 +5218,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 updatePopupStaticTextV2();
                 updatePopupDynamicContentV2();
                 updatePopupHistoryV2();
-                positionPopup();
+                schedulePopupPosition(true);
             });
             popupModeSwitcher.appendChild(button);
             state.popup.settingsPopupModeButtons.push(button);
@@ -4435,6 +5229,42 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         popupModeContent.appendChild(popupModeSwitcher);
         popupModeRow.append(popupModeTitle, popupModeContent, popupModeHint);
         settingsPanel.appendChild(popupModeRow);
+
+        const performanceModeRow = document.createElement("div");
+        performanceModeRow.className = "dtt-settings-row";
+        const performanceModeTitle = document.createElement("div");
+        performanceModeTitle.className = "dtt-settings-row-label";
+        performanceModeTitle.textContent = t("performanceModeLabel");
+        const performanceModeContent = document.createElement("div");
+        performanceModeContent.className = "dtt-settings-row-content";
+        const performanceModeSwitcher = document.createElement("div");
+        performanceModeSwitcher.className = "dtt-language-switcher";
+        state.popup.settingsPerformanceModeButtons = [];
+        const performanceModeOptions = [
+            { mode: "default", label: t("performanceModeDefault") },
+            { mode: "lightweight", label: t("performanceModeLightweight") }
+        ];
+        for (const option of performanceModeOptions) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `dtt-language-button${state.performanceMode === option.mode ? " is-active" : ""}`;
+            button.textContent = option.label;
+            button.dataset.performanceMode = option.mode;
+            button.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (state.performanceMode === option.mode) return;
+                applyPerformanceMode(option.mode);
+            });
+            performanceModeSwitcher.appendChild(button);
+            state.popup.settingsPerformanceModeButtons.push(button);
+        }
+        const performanceModeHint = document.createElement("div");
+        performanceModeHint.className = "dtt-popup-mode-hint";
+        performanceModeHint.textContent = t("performanceModeHint");
+        performanceModeContent.appendChild(performanceModeSwitcher);
+        performanceModeRow.append(performanceModeTitle, performanceModeContent, performanceModeHint);
+        settingsPanel.appendChild(performanceModeRow);
 
         const pauseThresholdRow = document.createElement("div");
         pauseThresholdRow.className = "dtt-settings-row";
@@ -4461,7 +5291,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 updatePopupStaticTextV2();
                 updatePopupDynamicContentV2();
                 updatePopupHistoryV2();
-                positionPopup();
+                schedulePopupPosition(true);
             });
             pauseThresholdSwitcher.appendChild(button);
             state.popup.settingsPauseThresholdButtons.push(button);
@@ -4538,7 +5368,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             updatePopupDynamicContentV2();
             updatePopupHistoryV2();
             updatePopupFireIcon();
-            positionPopup();
+            schedulePopupPosition(true);
         });
         keepStreakContent.append(keepStreakHint, keepStreakInput);
         const keepStreakPreview = document.createElement("div");
@@ -4561,7 +5391,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         retentionInput.step = "1";
         retentionInput.value = String(state.historyRetentionMonths);
         retentionInput.className = "dtt-retention-input";
-        retentionInput.title = `1–${CONFIG.maxHistoryRetentionMonths}`;
+        retentionInput.title = `1РІР‚вЂњ${CONFIG.maxHistoryRetentionMonths}`;
         retentionInput.addEventListener("click", (event) => event.stopPropagation());
         retentionInput.addEventListener("change", (event) => {
             event.stopPropagation();
@@ -4702,6 +5532,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             await checkForUpdates({ manual: true, anchorEl: event.currentTarget });
         });
 
+
         updateActions.append(updateCheckBtn);
         updateRow.append(updateTitle, updateHint, updateActions);
         settingsPanel.appendChild(updateRow);
@@ -4773,7 +5604,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         root.appendChild(settingsPanel);
 
-        // ── Save node refs ───────────────────────────────────
+        // РІвЂќР‚РІвЂќР‚ Save node refs РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
         state.popup.titleNode = title;
         state.popup.badgeNode = badgePill;
         state.popup.viewToggleNode = weeklyToggleBtn;
@@ -4784,6 +5615,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.summaryGoalLabelNode = goalLabel;
         state.popup.summaryGoalValueNode = goalValue;
         state.popup.summaryGoalProgressNode = goalProgressBar;
+        state.popup.summaryTopTracksWrapNode = topTracksWrap;
+        state.popup.summaryTopTracksListNode = topTracksList;
         state.popup.intervalsSectionNode = intervalsSection;
         state.popup.sessionsTitleNode = intervalsTitle;
         state.popup.intervalsListNode = intervalsList;
@@ -4793,12 +5626,20 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.historyListNode = historyList;
         state.popup.historyToggleNode = historyToggle;
         state.popup.weeklySectionNode = weeklySection;
-        state.popup.weeklySectionTitleNode = weeklyHeading;
+        state.popup.weeklySectionTitleNode = weeklyHeadingTitle;
+        state.popup.weeklyDetailSwitchNode = weeklyDetailSwitch;
         state.popup.weeklyAverageLabelNode = weeklyAverageLabel;
         state.popup.weeklyAverageValueNode = weeklyAverageValue;
         state.popup.weeklyBestDayLabelNode = weeklyBestDayLabel;
         state.popup.weeklyBestDayValueNode = weeklyBestDayValue;
         state.popup.weeklyBarsNode = weeklyBars;
+        state.popup.weeklyCompareNode = weeklyCompare;
+        state.popup.weeklyCompareTodayLabelNode = weeklyCompareTodayLabel;
+        state.popup.weeklyCompareTodayValueNode = weeklyCompareTodayValue;
+        state.popup.weeklyCompareYesterdayLabelNode = weeklyCompareYesterdayLabel;
+        state.popup.weeklyCompareYesterdayValueNode = weeklyCompareYesterdayValue;
+        state.popup.weeklyCompareDeltaLabelNode = weeklyCompareDeltaLabel;
+        state.popup.weeklyCompareDeltaValueNode = weeklyCompareDeltaValue;
         state.popup.retentionLabelNode = retTitle;
         state.popup.retentionSuffixNode = retSuffix;
         state.popup.settingsGearNode = gearBtn;
@@ -4814,8 +5655,15 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.settingsBadgeTitleNode = badgeTitle;
         state.popup.settingsBadgeHintNode = badgeHint;
         state.popup.settingsBadgeInputNode = badgeInput;
+        state.popup.settingsTopTracksTitleNode = topTracksTitleNode;
+        state.popup.settingsTopTracksHintNode = topTracksHint;
+        state.popup.settingsTopTracksInputNode = topTracksInput;
+        state.popup.settingsTopTracksCountRowNode = topTracksCountRow;
+        state.popup.settingsTopTracksCountTitleNode = topTracksCountTitle;
         state.popup.settingsPopupModeTitleNode = popupModeTitle;
         state.popup.settingsPopupModeHintNode = popupModeHint;
+        state.popup.settingsPerformanceModeTitleNode = performanceModeTitle;
+        state.popup.settingsPerformanceModeHintNode = performanceModeHint;
         state.popup.settingsPauseThresholdTitleNode = pauseThresholdTitle;
         state.popup.settingsPauseThresholdHintNode = pauseThresholdHint;
         state.popup.settingsRetentionTitleNode = retTitle;
@@ -4894,7 +5742,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.settingsBackNode.style.display = "";
         }
         updatePopupStaticTextV2();
-        positionPopup();
+        schedulePopupPosition(true);
     }
 
     function closeSettings() {
@@ -4906,7 +5754,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         if (state.popup.viewToggleNode) state.popup.viewToggleNode.style.display = "";
         if (state.popup.settingsBackNode) state.popup.settingsBackNode.style.display = "none";
         updatePopupStaticTextV2();
-        positionPopup();
+        schedulePopupPosition(true);
     }
 
     function renderRows(listNode, rows) {
@@ -4927,15 +5775,27 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 item.dataset.key = row.key;
             }
 
+            const main = document.createElement("div");
+            main.className = "dtt-interval-main";
+
             const range = document.createElement("span");
             range.className = "dtt-interval-range";
             range.textContent = row.label;
+
+            main.appendChild(range);
+
+            if (row.details) {
+                const details = document.createElement("span");
+                details.className = "dtt-interval-details";
+                details.textContent = row.details;
+                main.appendChild(details);
+            }
 
             const duration = document.createElement("span");
             duration.className = "dtt-interval-duration";
             duration.textContent = row.duration;
 
-            item.append(range, duration);
+            item.append(main, duration);
             listNode.appendChild(item);
         }
     }
@@ -4946,6 +5806,27 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             .join("|");
     }
 
+    function createRowsSignature(rows) {
+        return rows
+            .map((row) => `${row.key || ""}:${row.label || ""}:${row.duration || ""}:${row.details || ""}:${row.isToday ? "1" : "0"}`)
+            .join("|");
+    }
+
+    function createWeeklySummarySignature(summary) {
+        const bestDayKey = summary.bestDay ? `${summary.bestDay.date}:${summary.bestDay.totalSeconds}` : "none";
+        return [
+            summary.totalSeconds,
+            summary.averageSeconds,
+            summary.maxSeconds,
+            bestDayKey,
+            ...summary.days.map((day) => `${day.date}:${day.totalSeconds}`)
+        ].join("|");
+    }
+
+    function isLightweightMode() {
+        return state.performanceMode === "lightweight";
+    }
+
     function syncPopupModeClass() {
         if (!state.popup.node) {
             return;
@@ -4953,6 +5834,87 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         state.popup.node.classList.toggle("dtt-popup-mode-compact", !isFullPopupMode());
         state.popup.node.classList.toggle("dtt-popup-mode-full", isFullPopupMode());
+    }
+
+    function syncPerformanceModeClass() {
+        state.ui.widget?.classList.toggle("dtt-performance-lightweight", isLightweightMode());
+        state.popup.node?.classList.toggle("dtt-performance-lightweight", isLightweightMode());
+    }
+
+    function schedulePopupPosition(force = false) {
+        if (!state.popup.node) {
+            return;
+        }
+
+        if (!force && state.runtime.popupPositionFrameId !== null) {
+            return;
+        }
+
+        if (state.runtime.popupPositionFrameId !== null) {
+            cancelAnimationFrame(state.runtime.popupPositionFrameId);
+        }
+
+        state.runtime.popupPositionFrameId = requestAnimationFrame(() => {
+            state.runtime.popupPositionFrameId = null;
+            positionPopup();
+        });
+    }
+
+    function renderWeeklyBars(weeklySummary) {
+        if (!state.popup.weeklyBarsNode) {
+            return false;
+        }
+
+        let didMutate = false;
+        if (state.popup.weeklyBarNodes.length !== weeklySummary.days.length) {
+            state.popup.weeklyBarNodes = [];
+            state.popup.weeklyBarsNode.innerHTML = "";
+            const fragment = document.createDocumentFragment();
+
+            for (const day of weeklySummary.days) {
+                const barItem = document.createElement("div");
+                barItem.className = "dtt-weekly-bar-item";
+                const track = document.createElement("div");
+                track.className = "dtt-weekly-bar-track";
+                const fill = document.createElement("div");
+                fill.className = "dtt-weekly-bar-fill";
+                const label = document.createElement("div");
+                label.className = "dtt-weekly-bar-label";
+
+                track.appendChild(fill);
+                barItem.append(track, label);
+                fragment.appendChild(barItem);
+                state.popup.weeklyBarNodes.push({ barItem, fill, label });
+            }
+
+            state.popup.weeklyBarsNode.appendChild(fragment);
+            didMutate = true;
+        }
+
+        weeklySummary.days.forEach((day, index) => {
+            const nodeSet = state.popup.weeklyBarNodes[index];
+            if (!nodeSet) {
+                return;
+            }
+
+            const heightPercent = day.totalSeconds <= 0
+                ? 0
+                : Math.max(6, Math.round((day.totalSeconds / weeklySummary.maxSeconds) * 100));
+            const title = `${day.date}: ${formatDuration(day.totalSeconds)}`;
+            const height = `${heightPercent}%`;
+
+            if (nodeSet.barItem.title !== title) {
+                nodeSet.barItem.title = title;
+            }
+            if (nodeSet.label.textContent !== day.label) {
+                nodeSet.label.textContent = day.label;
+            }
+            if (nodeSet.fill.style.height !== height) {
+                nodeSet.fill.style.height = height;
+            }
+        });
+
+        return didMutate;
     }
 
     function updatePopupStaticTextV2() {
@@ -5001,13 +5963,31 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.historyTitleNode.textContent = t("historyTitle");
         }
         if (state.popup.weeklySectionTitleNode) {
-            state.popup.weeklySectionTitleNode.textContent = t("weeklySummaryTitle");
+            state.popup.weeklySectionTitleNode.textContent = state.popup.weeklyDetailMode === "compare"
+                ? t("yesterdayVsTodayTitle")
+                : t("weeklySummaryTitle");
+        }
+        if (state.popup.weeklyDetailSwitchNode) {
+            const nextLabel = state.popup.weeklyDetailMode === "compare"
+                ? t("weeklySummaryTitle")
+                : t("yesterdayVsTodayTitle");
+            state.popup.weeklyDetailSwitchNode.title = `${t("yesterdayVsTodaySwitchTitle")}: ${nextLabel}`;
+            state.popup.weeklyDetailSwitchNode.setAttribute("aria-label", `${t("yesterdayVsTodaySwitchTitle")}: ${nextLabel}`);
         }
         if (state.popup.weeklyAverageLabelNode) {
             state.popup.weeklyAverageLabelNode.textContent = t("weeklyAverageLabel");
         }
         if (state.popup.weeklyBestDayLabelNode) {
             state.popup.weeklyBestDayLabelNode.textContent = t("weeklyBestDayLabel");
+        }
+        if (state.popup.weeklyCompareTodayLabelNode) {
+            state.popup.weeklyCompareTodayLabelNode.textContent = t("comparisonTodayLabel");
+        }
+        if (state.popup.weeklyCompareYesterdayLabelNode) {
+            state.popup.weeklyCompareYesterdayLabelNode.textContent = t("comparisonYesterdayLabel");
+        }
+        if (state.popup.weeklyCompareDeltaLabelNode) {
+            state.popup.weeklyCompareDeltaLabelNode.textContent = t("comparisonDeltaLabel");
         }
         if (state.popup.settingsLangTitleNode) {
             state.popup.settingsLangTitleNode.textContent = t("languageLabel");
@@ -5036,6 +6016,21 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         if (state.popup.settingsBadgeInputNode) {
             setSettingsToggleButtonState(state.popup.settingsBadgeInputNode, state.badgeVisible);
         }
+        if (state.popup.settingsTopTracksTitleNode) {
+            state.popup.settingsTopTracksTitleNode.textContent = t("topTracksToggleLabel");
+        }
+        if (state.popup.settingsTopTracksHintNode) {
+            state.popup.settingsTopTracksHintNode.textContent = t("topTracksToggleHint");
+        }
+        if (state.popup.settingsTopTracksInputNode) {
+            setSettingsToggleButtonState(state.popup.settingsTopTracksInputNode, state.topTracksVisible);
+        }
+        if (state.popup.settingsTopTracksCountRowNode) {
+            state.popup.settingsTopTracksCountRowNode.hidden = !state.topTracksVisible;
+        }
+        if (state.popup.settingsTopTracksCountTitleNode) {
+            state.popup.settingsTopTracksCountTitleNode.textContent = t("topTracksCountLabel");
+        }
         if (state.popup.settingsChannelTitleNode) {
             state.popup.settingsChannelTitleNode.textContent = getChannelUiText().title;
         }
@@ -5047,6 +6042,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         }
         if (state.popup.settingsPopupModeHintNode) {
             state.popup.settingsPopupModeHintNode.textContent = t("popupModeHint");
+        }
+        if (state.popup.settingsPerformanceModeTitleNode) {
+            state.popup.settingsPerformanceModeTitleNode.textContent = t("performanceModeLabel");
+        }
+        if (state.popup.settingsPerformanceModeHintNode) {
+            state.popup.settingsPerformanceModeHintNode.textContent = t("performanceModeHint");
         }
         if (state.popup.settingsPauseThresholdTitleNode) {
             state.popup.settingsPauseThresholdTitleNode.textContent = t("pauseThresholdLabel");
@@ -5151,6 +6152,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             button.classList.toggle("is-active", button.dataset.popupMode === state.popupMode);
             button.textContent = button.dataset.popupMode === "full" ? t("popupModeFull") : t("popupModeCompact");
         }
+        for (const button of state.popup.settingsPerformanceModeButtons ?? []) {
+            button.classList.toggle("is-active", button.dataset.performanceMode === state.performanceMode);
+            button.textContent = button.dataset.performanceMode === "lightweight"
+                ? t("performanceModeLightweight")
+                : t("performanceModeDefault");
+        }
         for (const button of state.popup.settingsChannelButtons ?? []) {
             button.hidden = button.dataset.channel === "dev" && !state.devChannelAvailable;
             button.classList.toggle("is-active", button.dataset.channel === CHANNEL);
@@ -5163,113 +6170,180 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         for (const button of state.popup.settingsPauseThresholdButtons ?? []) {
             button.classList.toggle("is-active", Number(button.dataset.pauseSeconds) === state.pauseSeconds);
         }
+        for (const button of state.popup.settingsTopTracksCountButtons ?? []) {
+            button.classList.toggle("is-active", Number(button.dataset.topTracksCount) === state.topTracksDisplayCount);
+        }
         if (state.popup.viewToggleNode) {
             state.popup.viewToggleNode.hidden = !isFullPopupMode();
         }
         state.popup.lastLanguage = state.language;
+        syncPerformanceModeClass();
     }
 
     function updatePopupDynamicContentV2(options = {}) {
         if (!state.popup.node) {
-            return;
+            return false;
         }
 
         const now = options.now ?? Date.now();
         const totalSeconds = options.totalSeconds ?? getComputedDayTotalSeconds(now);
         const todayIntervalRows = options.todayIntervalRows ?? getTodayIntervalRows(now);
         const isWeekMode = state.popup.viewMode === "week";
-        const weeklySummary = getWeeklySummaryData(totalSeconds);
+        const weeklySummary = isWeekMode ? getWeeklySummaryData(totalSeconds) : null;
+        const weeklyComparison = isWeekMode ? getYesterdayVsTodayData(totalSeconds) : null;
+        const isWeeklyCompareMode = isWeekMode && state.popup.weeklyDetailMode === "compare";
+        const goal = getDailyGoalProgress(totalSeconds);
+        let didMutateLayout = false;
 
         if (state.popup.hintNode) {
             state.popup.hintNode.textContent = "";
         }
-        if (state.popup.summaryDateNode) {
-            state.popup.summaryDateNode.textContent = isWeekMode ? t("weeklyRangeLabel") : state.day.date;
-        }
-        if (state.popup.summaryTotalNode) {
-            state.popup.summaryTotalNode.textContent = formatDuration(isWeekMode ? weeklySummary.totalSeconds : totalSeconds);
-        }
-        if (state.popup.summaryGoalWrapNode) {
-            const goal = getDailyGoalProgress(totalSeconds);
-            state.popup.summaryGoalWrapNode.hidden = isWeekMode || !goal.enabled;
-            if (goal.enabled) {
-                if (state.popup.summaryGoalLabelNode) {
-                    state.popup.summaryGoalLabelNode.textContent = goal.complete
-                        ? t("dailyGoalComplete")
-                        : t("dailyGoalProgress");
+
+        const summarySignature = [
+            state.language,
+            state.performanceMode,
+            isWeekMode ? "week" : "today",
+            isWeekMode ? weeklySummary.totalSeconds : totalSeconds,
+            goal.enabled ? "1" : "0",
+            goal.complete ? "1" : "0",
+            goal.percentage,
+            goal.targetSeconds
+        ].join("|");
+        if (summarySignature !== state.popup.lastSummarySignature) {
+            if (state.popup.summaryDateNode) {
+                state.popup.summaryDateNode.textContent = isWeekMode ? t("weeklyRangeLabel") : state.day.date;
+            }
+            if (state.popup.summaryTotalNode) {
+                state.popup.summaryTotalNode.textContent = formatDuration(isWeekMode ? weeklySummary.totalSeconds : totalSeconds);
+            }
+            if (state.popup.summaryGoalWrapNode) {
+                const nextHidden = isWeekMode || !goal.enabled;
+                if (state.popup.summaryGoalWrapNode.hidden !== nextHidden) {
+                    state.popup.summaryGoalWrapNode.hidden = nextHidden;
+                    didMutateLayout = true;
                 }
-                if (state.popup.summaryGoalValueNode) {
-                    state.popup.summaryGoalValueNode.textContent = `${formatDuration(totalSeconds)} / ${formatDuration(goal.targetSeconds)}`;
-                }
-                if (state.popup.summaryGoalProgressNode) {
-                    state.popup.summaryGoalProgressNode.style.width = `${Math.max(0, Math.min(100, goal.ratio * 100))}%`;
+                if (goal.enabled) {
+                    if (state.popup.summaryGoalLabelNode) {
+                        state.popup.summaryGoalLabelNode.textContent = goal.complete
+                            ? t("dailyGoalComplete")
+                            : t("dailyGoalProgress");
+                    }
+                    if (state.popup.summaryGoalValueNode) {
+                        state.popup.summaryGoalValueNode.textContent = `${formatDuration(totalSeconds)} / ${formatDuration(goal.targetSeconds)}`;
+                    }
+                    if (state.popup.summaryGoalProgressNode) {
+                        state.popup.summaryGoalProgressNode.style.width = `${Math.max(0, Math.min(100, goal.ratio * 100))}%`;
+                    }
                 }
             }
+            state.popup.lastSummarySignature = summarySignature;
         }
-        if (state.popup.intervalsSectionNode) {
+
+        if (state.popup.summaryTopTracksWrapNode && state.popup.summaryTopTracksListNode) {
+            const topTrackRows = getTodayTopTrackRows();
+            const nextHidden = isWeekMode || !state.topTracksVisible;
+            if (state.popup.summaryTopTracksWrapNode.hidden !== nextHidden) {
+                state.popup.summaryTopTracksWrapNode.hidden = nextHidden;
+                didMutateLayout = true;
+            }
+            const renderedTopTrackRows = topTrackRows.length > 0
+                ? topTrackRows
+                : [{
+                    key: "empty-top-tracks",
+                    label: t("topTracksEmpty"),
+                    duration: ""
+                }];
+            const topTracksSignature = `${nextHidden ? "1" : "0"}|${createRowsSignature(renderedTopTrackRows)}`;
+            if (topTracksSignature !== state.popup.lastTopTracksSignature) {
+                renderRows(state.popup.summaryTopTracksListNode, renderedTopTrackRows);
+                state.popup.lastTopTracksSignature = topTracksSignature;
+                didMutateLayout = true;
+            }
+        }
+
+        if (state.popup.intervalsSectionNode && state.popup.intervalsSectionNode.hidden !== isWeekMode) {
             state.popup.intervalsSectionNode.hidden = isWeekMode;
+            didMutateLayout = true;
         }
         if (state.popup.intervalsListNode) {
-            renderRows(
-                state.popup.intervalsListNode,
-                getDisplayedTodayIntervalRows(todayIntervalRows).map((row) => ({
-                    ...row,
-                    isToday: true
-                }))
-            );
-        }
-        if (state.popup.historySectionNode) {
-            state.popup.historySectionNode.hidden = isWeekMode;
-        }
-        if (state.popup.weeklySectionNode) {
-            state.popup.weeklySectionNode.hidden = !isWeekMode;
-        }
-        if (state.popup.weeklyAverageValueNode) {
-            state.popup.weeklyAverageValueNode.textContent = formatDuration(weeklySummary.averageSeconds);
-        }
-        if (state.popup.weeklyBestDayValueNode) {
-            state.popup.weeklyBestDayValueNode.textContent = weeklySummary.bestDay
-                ? `${weeklySummary.bestDay.label} • ${formatDuration(weeklySummary.bestDay.totalSeconds)}`
-                : t("weeklyBestDayEmpty");
-        }
-        if (state.popup.weeklyBarsNode) {
-            state.popup.weeklyBarsNode.innerHTML = "";
-            for (const day of weeklySummary.days) {
-                const barItem = document.createElement("div");
-                barItem.className = "dtt-weekly-bar-item";
-                barItem.title = `${day.date}: ${formatDuration(day.totalSeconds)}`;
-
-                const track = document.createElement("div");
-                track.className = "dtt-weekly-bar-track";
-
-                const fill = document.createElement("div");
-                fill.className = "dtt-weekly-bar-fill";
-                const heightPercent = day.totalSeconds <= 0
-                    ? 0
-                    : Math.max(6, Math.round((day.totalSeconds / weeklySummary.maxSeconds) * 100));
-                fill.style.height = `${heightPercent}%`;
-
-                const label = document.createElement("div");
-                label.className = "dtt-weekly-bar-label";
-                label.textContent = day.label;
-
-                track.appendChild(fill);
-                barItem.append(track, label);
-                state.popup.weeklyBarsNode.appendChild(barItem);
+            const displayedIntervalRows = getDisplayedTodayIntervalRows(todayIntervalRows).map((row) => ({
+                ...row,
+                isToday: true
+            }));
+            const intervalsSignature = `${isWeekMode ? "1" : "0"}|${state.popup.todaySessionsExpanded ? "1" : "0"}|${createRowsSignature(displayedIntervalRows)}`;
+            if (intervalsSignature !== state.popup.lastIntervalsSignature) {
+                renderRows(state.popup.intervalsListNode, displayedIntervalRows);
+                state.popup.lastIntervalsSignature = intervalsSignature;
+                didMutateLayout = true;
             }
         }
+        if (state.popup.historySectionNode && state.popup.historySectionNode.hidden !== isWeekMode) {
+            state.popup.historySectionNode.hidden = isWeekMode;
+            didMutateLayout = true;
+        }
+        if (state.popup.weeklySectionNode && state.popup.weeklySectionNode.hidden !== !isWeekMode) {
+            state.popup.weeklySectionNode.hidden = !isWeekMode;
+            didMutateLayout = true;
+        }
+        if (state.popup.weeklyCompareNode && state.popup.weeklyCompareNode.hidden !== !isWeeklyCompareMode) {
+            state.popup.weeklyCompareNode.hidden = !isWeeklyCompareMode;
+            didMutateLayout = true;
+        }
+        if (state.popup.weeklyBarsNode && state.popup.weeklyBarsNode.hidden !== isWeeklyCompareMode) {
+            state.popup.weeklyBarsNode.hidden = isWeeklyCompareMode;
+            didMutateLayout = true;
+        }
+
+        if (weeklySummary && weeklyComparison) {
+            const weeklySignature = isWeeklyCompareMode
+                ? [
+                    "compare",
+                    state.language,
+                    weeklyComparison.todaySeconds,
+                    weeklyComparison.yesterdaySeconds,
+                    weeklyComparison.deltaSeconds
+                ].join("|")
+                : `summary|${state.language}|${createWeeklySummarySignature(weeklySummary)}`;
+            if (weeklySignature !== state.popup.lastWeeklySignature) {
+                if (isWeeklyCompareMode) {
+                    if (state.popup.weeklyCompareTodayValueNode) {
+                        state.popup.weeklyCompareTodayValueNode.textContent = formatDuration(weeklyComparison.todaySeconds);
+                    }
+                    if (state.popup.weeklyCompareYesterdayValueNode) {
+                        state.popup.weeklyCompareYesterdayValueNode.textContent = weeklyComparison.yesterdaySeconds > 0
+                            ? formatDuration(weeklyComparison.yesterdaySeconds)
+                            : t("comparisonNoYesterday");
+                    }
+                    if (state.popup.weeklyCompareDeltaValueNode) {
+                        state.popup.weeklyCompareDeltaValueNode.textContent = formatSignedDuration(weeklyComparison.deltaSeconds);
+                    }
+                } else {
+                    if (state.popup.weeklyAverageValueNode) {
+                        state.popup.weeklyAverageValueNode.textContent = formatDuration(weeklySummary.averageSeconds);
+                    }
+                    if (state.popup.weeklyBestDayValueNode) {
+                        state.popup.weeklyBestDayValueNode.textContent = weeklySummary.bestDay
+                            ? `${weeklySummary.bestDay.label} вЂў ${formatDuration(weeklySummary.bestDay.totalSeconds)}`
+                            : t("weeklyBestDayEmpty");
+                    }
+                    didMutateLayout = renderWeeklyBars(weeklySummary) || didMutateLayout;
+                }
+                state.popup.lastWeeklySignature = weeklySignature;
+            }
+        }
+
         updateTodaySessionsToggle(todayIntervalRows);
-        updateStreakProtectionUi();
+        return didMutateLayout;
     }
 
     function updatePopupHistoryV2(dailySummaryRows = getDailySummaryRows()) {
         if (!state.popup.node || !state.popup.historyListNode) {
-            return;
+            return false;
         }
 
         const historySignature = `${state.language}|${state.popupMode}|${createHistorySignature(dailySummaryRows)}|${state.popup.historyExpanded ? "1" : "0"}`;
         if (historySignature === state.popup.lastHistorySignature) {
-            return;
+            return false;
         }
 
         updateHistoryToggle(dailySummaryRows);
@@ -5285,8 +6359,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         );
 
         state.popup.lastHistorySignature = historySignature;
+        return true;
     }
-
     function positionPopup() {
         const popupNode = state.popup.node;
         const widget = state.ui.widget;
@@ -5328,7 +6402,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         updatePopupDynamicContentV2();
         updatePopupHistoryV2();
         popupNode.classList.toggle("dtt-pinned", state.popup.isPinned);
-        positionPopup();
+        syncPerformanceModeClass();
+        schedulePopupPosition(true);
 
         requestAnimationFrame(() => {
             if (state.popup.node === popupNode) {
@@ -5353,6 +6428,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         popupNode.classList.remove("dtt-visible");
         state.popup.node = null;
         state.popup.viewToggleNode = null;
+        state.popup.weeklyDetailMode = "summary";
         state.popup.titleNode = null;
         state.popup.badgeNode = null;
         state.popup.hintNode = null;
@@ -5362,6 +6438,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.summaryGoalLabelNode = null;
         state.popup.summaryGoalValueNode = null;
         state.popup.summaryGoalProgressNode = null;
+        state.popup.summaryTopTracksWrapNode = null;
+        state.popup.summaryTopTracksListNode = null;
         state.popup.intervalsSectionNode = null;
         state.popup.sessionsTitleNode = null;
         state.popup.intervalsListNode = null;
@@ -5374,14 +6452,27 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.historyExpanded = false;
         state.popup.weeklySectionNode = null;
         state.popup.weeklySectionTitleNode = null;
+        state.popup.weeklyDetailSwitchNode = null;
         state.popup.weeklyAverageLabelNode = null;
         state.popup.weeklyAverageValueNode = null;
         state.popup.weeklyBestDayLabelNode = null;
         state.popup.weeklyBestDayValueNode = null;
         state.popup.weeklyBarsNode = null;
+        state.popup.weeklyCompareNode = null;
+        state.popup.weeklyCompareTodayLabelNode = null;
+        state.popup.weeklyCompareTodayValueNode = null;
+        state.popup.weeklyCompareYesterdayLabelNode = null;
+        state.popup.weeklyCompareYesterdayValueNode = null;
+        state.popup.weeklyCompareDeltaLabelNode = null;
+        state.popup.weeklyCompareDeltaValueNode = null;
         state.popup.lastHistorySignature = "";
+        state.popup.lastIntervalsSignature = "";
+        state.popup.lastTopTracksSignature = "";
+        state.popup.lastWeeklySignature = "";
+        state.popup.lastSummarySignature = "";
         state.popup.lastHeight = 0;
         state.popup.lastLanguage = null;
+        state.popup.weeklyBarNodes = [];
         state.popup.languageButtons = [];
         state.popup.retentionLabelNode = null;
         state.popup.retentionSuffixNode = null;
@@ -5397,6 +6488,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.settingsPopupModeTitleNode = null;
         state.popup.settingsPopupModeHintNode = null;
         state.popup.settingsPopupModeButtons = [];
+        state.popup.settingsPerformanceModeTitleNode = null;
+        state.popup.settingsPerformanceModeHintNode = null;
+        state.popup.settingsPerformanceModeButtons = [];
         state.popup.settingsChannelTitleNode = null;
         state.popup.settingsChannelHintNode = null;
         state.popup.settingsChannelButtons = [];
@@ -5422,6 +6516,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.settingsBadgeTitleNode = null;
         state.popup.settingsBadgeHintNode = null;
         state.popup.settingsBadgeInputNode = null;
+        state.popup.settingsTopTracksTitleNode = null;
+        state.popup.settingsTopTracksHintNode = null;
+        state.popup.settingsTopTracksInputNode = null;
+        state.popup.settingsTopTracksCountRowNode = null;
+        state.popup.settingsTopTracksCountTitleNode = null;
+        state.popup.settingsTopTracksCountButtons = [];
         state.popup.updateCheckTitleNode = null;
         state.popup.updateCheckHintNode = null;
         state.popup.updateCheckBtnNode = null;
@@ -5578,13 +6678,17 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             }
 
             state.ui.pendingInjectCheck = true;
-            requestAnimationFrame(() => {
+            if (state.ui.injectObserverTimeoutId !== null) {
+                clearTimeout(state.ui.injectObserverTimeoutId);
+            }
+            state.ui.injectObserverTimeoutId = setTimeout(() => {
+                state.ui.injectObserverTimeoutId = null;
                 state.ui.pendingInjectCheck = false;
 
                 if (!document.getElementById("dtt-widget") && !injectWidget()) {
                     scheduleInjectRetry();
                 }
-            });
+            }, isLightweightMode() ? 220 : 120);
         });
 
         observer.observe(document.body, { childList: true, subtree: true });
@@ -5593,15 +6697,47 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
     function checkTrackChange() {
         try {
-            const uri = Spicetify.Player.data?.item?.uri || null;
+            const trackInfo = getCurrentTrackInfo();
+            const uri = trackInfo?.uri || null;
+            const progressMs = getCurrentTrackProgressMs();
+            const lastUri = state.runtime._lastTrackUri;
+            const lastProgressMs = state.runtime._lastTrackProgressMs;
+            const sameTrackRestarted = Boolean(
+                uri &&
+                lastUri &&
+                uri === lastUri &&
+                Number.isFinite(progressMs) &&
+                Number.isFinite(lastProgressMs) &&
+                progressMs + 1500 < lastProgressMs
+            );
+
+            if (uri && lastUri && uri === lastUri && !sameTrackRestarted) {
+                accumulateActiveTrackListen(progressMs);
+            }
+
             if (uri && state.runtime._lastTrackUri && uri !== state.runtime._lastTrackUri) {
+                if (state.currentSession) {
+                    finalizeActiveTrackPlayInSession();
+                    primeActiveTrackCycle(trackInfo, progressMs);
+                }
                 saveTodayData();
                 if (!state.runtime._streakTestMode) {
                     computeStreak();
                     updatePopupFireIcon();
                 }
             }
+            if (sameTrackRestarted && state.currentSession) {
+                finalizeActiveTrackPlayInSession();
+                primeActiveTrackCycle(trackInfo, progressMs);
+                saveTodayData();
+            }
+            if (!state.currentSession && uri) {
+                state.runtime._lastTrackUri = uri;
+                state.runtime._lastTrackProgressMs = progressMs;
+                return;
+            }
             state.runtime._lastTrackUri = uri;
+            state.runtime._lastTrackProgressMs = progressMs;
         } catch (_) {}
     }
 
@@ -5660,8 +6796,14 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         updateWidgetUI(totalSeconds);
         setWidgetPausedState(shouldWidgetBePaused(), true);
         if (!state.runtime._streakTestMode) {
-            computeStreak();
-            updatePopupFireIcon();
+            const thresholdMet = totalSeconds >= loadStreakThreshold();
+            if (thresholdMet !== state.runtime._lastStreakThresholdMet) {
+                state.runtime._lastStreakThresholdMet = thresholdMet;
+                computeStreak();
+            }
+            if (state.popup.node) {
+                updatePopupFireIcon();
+            }
         }
 
         if (state.popup.node) {
@@ -5669,16 +6811,14 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             if (state.popup.lastLanguage !== state.language) {
                 updatePopupStaticTextV2();
             }
-            updatePopupDynamicContentV2({
+            const popupChanged = updatePopupDynamicContentV2({
                 now,
                 totalSeconds,
                 todayIntervalRows: getTodayIntervalRows(now)
             });
-            updatePopupHistoryV2(dailySummaryRows);
-            const popupHeight = state.popup.node.offsetHeight;
-            if (popupHeight !== state.popup.lastHeight) {
-                state.popup.lastHeight = popupHeight;
-                positionPopup();
+            const historyChanged = updatePopupHistoryV2(dailySummaryRows);
+            if (popupChanged || historyChanged) {
+                schedulePopupPosition();
             }
         }
     }
@@ -5696,9 +6836,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
     function bindWindowEvents() {
         state.ui.resizeHandler = () => {
-            if (state.popup.node) {
-                positionPopup();
-            }
+        if (state.popup.node) {
+            schedulePopupPosition(true);
+        }
         };
 
         state.ui.beforeUnloadHandler = () => {
@@ -5741,8 +6881,16 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         hideApiUnavailableModal();
         hideTestChannelWarningModal();
         hideStorageOptimizationModal();
+        if (state.runtime.popupPositionFrameId !== null) {
+            cancelAnimationFrame(state.runtime.popupPositionFrameId);
+            state.runtime.popupPositionFrameId = null;
+        }
         state.runtime.injectObserver?.disconnect?.();
         state.runtime.injectObserver = null;
+        if (state.ui.injectObserverTimeoutId !== null) {
+            clearTimeout(state.ui.injectObserverTimeoutId);
+            state.ui.injectObserverTimeoutId = null;
+        }
         if (state.runtime.injectRetryTimeoutId !== null) {
             clearTimeout(state.runtime.injectRetryTimeoutId);
             state.runtime.injectRetryTimeoutId = null;
@@ -5766,6 +6914,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.summaryGoalLabelNode = null;
         state.popup.summaryGoalValueNode = null;
         state.popup.summaryGoalProgressNode = null;
+        state.popup.summaryTopTracksWrapNode = null;
+        state.popup.summaryTopTracksListNode = null;
         state.popup.intervalsSectionNode = null;
         state.popup.sessionsTitleNode = null;
         state.popup.intervalsListNode = null;
@@ -5778,14 +6928,28 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.historyExpanded = false;
         state.popup.weeklySectionNode = null;
         state.popup.weeklySectionTitleNode = null;
+        state.popup.weeklyDetailSwitchNode = null;
         state.popup.weeklyAverageLabelNode = null;
         state.popup.weeklyAverageValueNode = null;
         state.popup.weeklyBestDayLabelNode = null;
         state.popup.weeklyBestDayValueNode = null;
         state.popup.weeklyBarsNode = null;
+        state.popup.weeklyCompareNode = null;
+        state.popup.weeklyCompareTodayLabelNode = null;
+        state.popup.weeklyCompareTodayValueNode = null;
+        state.popup.weeklyCompareYesterdayLabelNode = null;
+        state.popup.weeklyCompareYesterdayValueNode = null;
+        state.popup.weeklyCompareDeltaLabelNode = null;
+        state.popup.weeklyCompareDeltaValueNode = null;
         state.popup.lastHistorySignature = "";
+        state.popup.lastIntervalsSignature = "";
+        state.popup.lastTopTracksSignature = "";
+        state.popup.lastWeeklySignature = "";
+        state.popup.lastSummarySignature = "";
         state.popup.lastHeight = 0;
         state.popup.lastLanguage = null;
+        state.popup.weeklyDetailMode = "summary";
+        state.popup.weeklyBarNodes = [];
         state.popup.retentionLabelNode = null;
         state.popup.retentionSuffixNode = null;
         state.popup.settingsOpen = false;
@@ -5800,6 +6964,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.settingsPopupModeTitleNode = null;
         state.popup.settingsPopupModeHintNode = null;
         state.popup.settingsPopupModeButtons = [];
+        state.popup.settingsPerformanceModeTitleNode = null;
+        state.popup.settingsPerformanceModeHintNode = null;
+        state.popup.settingsPerformanceModeButtons = [];
         state.popup.settingsChannelTitleNode = null;
         state.popup.settingsChannelHintNode = null;
         state.popup.settingsChannelButtons = [];
@@ -5825,6 +6992,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.settingsBadgeTitleNode = null;
         state.popup.settingsBadgeHintNode = null;
         state.popup.settingsBadgeInputNode = null;
+        state.popup.settingsTopTracksTitleNode = null;
+        state.popup.settingsTopTracksHintNode = null;
+        state.popup.settingsTopTracksInputNode = null;
+        state.popup.settingsTopTracksCountRowNode = null;
+        state.popup.settingsTopTracksCountTitleNode = null;
+        state.popup.settingsTopTracksCountButtons = [];
         state.popup.updateCheckTitleNode = null;
         state.popup.updateCheckHintNode = null;
         state.popup.updateCheckBtnNode = null;
@@ -5868,7 +7041,14 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             const optimizationUrl = new URL(CONFIG.storageOptimizationUrl);
             optimizationUrl.search = `?v=${encodeURIComponent(VERSION)}`;
 
-            const optimizationModule = await import(optimizationUrl.href);
+            const optimizationModule = await Promise.race([
+                import(optimizationUrl.href),
+                delay(4000).then(() => null)
+            ]);
+            if (!optimizationModule) {
+                console.warn("[DailyTimeTracker] Storage optimization module load timed out. Continuing without optimization.");
+                return;
+            }
             const optimizationStatus = optimizationModule?.getDttStorageOptimizationStatus?.({
                 localStorage: Spicetify.LocalStorage,
                 keys: {
@@ -5902,7 +7082,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 defaultRetentionMonths: CONFIG.historyRetentionMonths,
                 maxHistoryRetentionMonths: CONFIG.maxHistoryRetentionMonths
             });
-        } catch (_) {}
+        } catch (error) {
+            console.error("[DailyTimeTracker] Storage optimization failed.", error);
+        }
         finally {
             if (optimizationOverlayShownAt) {
                 const visibleMs = Date.now() - optimizationOverlayShownAt;
@@ -5922,9 +7104,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 subtitle: "A one-time storage upgrade is running. Today sessions are being separated and old history sessions are being removed."
             }
             : {
-                badge: "ОПТИМИЗАЦИЯ",
-                title: "Идет оптимизация локальных данных",
-                subtitle: "Выполняется одноразовое обновление хранилища. Сессии за сегодня выносятся в отдельный ключ, а старые сессии удаляются из истории."
+                badge: "Р С›Р СџР СћР ВР СљР ВР вЂ”Р С’Р В¦Р ВР Р‡",
+                title: "Р ВР Т‘Р ВµРЎвЂљ Р С•Р С—РЎвЂљР С‘Р СР С‘Р В·Р В°РЎвЂ Р С‘РЎРЏ Р В»Р С•Р С”Р В°Р В»РЎРЉР Р…РЎвЂ№РЎвЂ¦ Р Т‘Р В°Р Р…Р Р…РЎвЂ№РЎвЂ¦",
+                subtitle: "Р вЂ™РЎвЂ№Р С—Р С•Р В»Р Р…РЎРЏР ВµРЎвЂљРЎРѓРЎРЏ Р С•Р Т‘Р Р…Р С•РЎР‚Р В°Р В·Р С•Р Р†Р С•Р Вµ Р С•Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘Р Вµ РЎвЂ¦РЎР‚Р В°Р Р…Р С‘Р В»Р С‘РЎвЂ°Р В°. Р РЋР ВµРЎРѓРЎРѓР С‘Р С‘ Р В·Р В° РЎРѓР ВµР С–Р С•Р Т‘Р Р…РЎРЏ Р Р†РЎвЂ№Р Р…Р С•РЎРѓРЎРЏРЎвЂљРЎРѓРЎРЏ Р Р† Р С•РЎвЂљР Т‘Р ВµР В»РЎРЉР Р…РЎвЂ№Р в„– Р С”Р В»РЎР‹РЎвЂЎ, Р В° РЎРѓРЎвЂљР В°РЎР‚РЎвЂ№Р Вµ РЎРѓР ВµРЎРѓРЎРѓР С‘Р С‘ РЎС“Р Т‘Р В°Р В»РЎРЏРЎР‹РЎвЂљРЎРѓРЎРЏ Р С‘Р В· Р С‘РЎРѓРЎвЂљР С•РЎР‚Р С‘Р С‘."
             };
     }
 
@@ -6024,6 +7206,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     }
     }
 
-    await DailyTimeTracker();
-    console.log(`[DailyTimeTracker] Ready. Channel: ${runtimeConfig.channel}.`);
+    try {
+        await DailyTimeTracker();
+        console.log(`[DailyTimeTracker] Ready. Channel: ${runtimeConfig.channel}.`);
+    } catch (error) {
+        console.error(`[DailyTimeTracker] Bootstrap failed. Channel: ${runtimeConfig.channel}.`, error);
+        throw error;
+    }
 }
+

@@ -87,21 +87,15 @@ Want to read in Russian? Click [here](./ROADMAP-Rus.md).
 - Old day session details are no longer kept forever.
 - Migration from the older format happens automatically.
 
-### Runtime Refactor
-> Shipped in [v2.0.0](https://github.com/vvertax/DailyTimeTracker/releases/tag/v2.0.0)
-
-- The hosted runtime was split into `main.mjs`, `core.mjs`, `dtt_optimization.mjs`, and `version.json`.
-- This makes updates easier to maintain and deploy.
-
-### Channel Runtime Isolation
+### Channel Runtime Isolation + Update Flow
 > Shipped in [v2.0.1](https://github.com/vvertax/DailyTimeTracker/releases/tag/v2.0.1)
 
 - `release`, `test`, and `dev` now use clearer channel-specific runtime files.
-- Test and Dev are easier to update without touching the main release entry flow.
-- Shared infrastructure such as API endpoints and storage optimization can still stay centralized when needed.
+- Users can switch channels from Settings and reload Spotify to apply the change.
+- Manual update checks and version-triggered update actions are part of the hosted runtime flow.
 
 ### Top Tracks Today
-> Shipped in [v2.0.2-test](https://github.com/vvertax/DailyTimeTracker/releases/tag/v2.0.2-test)
+> Shipped in `v2.1.0`
 
 - Optional `Top tracks` block under the main daily total in the popup.
 - Shows the most played tracks for the current day only.
@@ -109,14 +103,33 @@ Want to read in Russian? Click [here](./ROADMAP-Rus.md).
 - The block is disabled by default.
 - Track plays are only counted after at least `20` seconds of real playback to avoid fake skip-to-end counts.
 
+### Yesterday vs Today
+> Shipped in `v2.1.0`
+
+- Alternate weekly subview inside the `Week` screen.
+- Quick comparison against the previous day.
+- Shows `Today`, `Yesterday`, and `Difference` values at a glance.
+
+### Performance Mode
+> Shipped in `v2.1.0`
+
+- `Default` and `Lightweight` options in Settings.
+- Reduces popup and visual-effect overhead on weaker CPU/GPU systems.
+- Helps keep the popup more responsive during longer sessions.
+
+### Popup Responsiveness Improvements
+> Shipped in `v2.1.0`
+
+- Popup updates now avoid more unnecessary rerenders.
+- Weekly and summary sections reuse rendered content more efficiently.
+- Enabling `Keep streak` no longer makes the streak appear to drop visually.
+
 ---
 
 ## Planned
 
 > No release-focused milestone is locked right now, but the following ideas are considered genuinely useful and likely to stay in scope.
 
-- `Yesterday vs Today`
-  - Quick comparison against the previous day to show whether listening time is up or down.
 - `Longest Session Today`
   - A compact summary of the single longest session in the current day.
 - `Goal Forecast`
