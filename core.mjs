@@ -1,4 +1,4 @@
-﻿// ==============================================================
+// ==============================================================
 // Daily Time Tracker - Spicetify Extension
 // Tracks Spotify listening time by day and shows a hover breakdown.
 // ==============================================================
@@ -66,7 +66,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         versionCheckIntervalMs: 300000,
         badgeApiBaseUrl: runtimeConfig.badgeApiBaseUrl,
         devChannelApiBaseUrl: runtimeConfig.devChannelApiBaseUrl,
-        apiHealthCheckIntervalMs: 300000,
+        apiHealthCheckIntervalMs: 5 * 60 * 1000,
+        apiHealthFailureThreshold: 2,
         devChannelRetryMs: 800,
         minTrackCountListenMs: 20000,
         streakThresholdSeconds: 300,
@@ -266,6 +267,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             devChannelRetryTimeoutId: null,
             updateCheckIntervalId: null,
             apiHealthCheckIntervalId: null,
+            apiHealthFailureCount: 0,
+            apiHealthWasAvailable: null,
+            apiUnavailableDismissed: false,
             _streakTestMode: false,
             _lastTrackUri: null,
             _lastTrackProgressMs: null,
@@ -285,117 +289,122 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
     const I18N = {
         ru: {
-            widgetTitle: "РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ Р·Р°РєСЂРµРїРёС‚СЊ СЃС‚Р°С‚РёСЃС‚РёРєСѓ",
-            popupTitle: "РЎС‚Р°С‚РёСЃС‚РёРєР° РїРѕ РґРЅСЏРј",
-            popupHintPinned: "Р—Р°РєСЂРµРїР»РµРЅРѕ. РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ РѕС‚РєСЂРµРїРёС‚СЊ.",
-            popupHintHover: "РџСЂРµРґРїСЂРѕСЃРјРѕС‚СЂ. РќР°Р¶РјРёС‚Рµ, С‡С‚РѕР±С‹ Р·Р°РєСЂРµРїРёС‚СЊ.",
-            todayLabel: "СЃРµРіРѕРґРЅСЏ",
-            emptyState: "РџРѕРєР° РЅРµС‚ РґР°РЅРЅС‹С… РїРѕ РґРЅСЏРј.",
-            sessionsTodayTitle: "РЎРµСЃСЃРёРё СЃРµРіРѕРґРЅСЏ",
-            topTracksEmpty: "РџРѕРєР° РЅРµС‚ РїСЂРѕСЃР»СѓС€РёРІР°РЅРёР№.",
-            topTracksToggleLabel: "РўРѕРї С‚СЂРµРєРѕРІ",
-            topTracksToggleHint: "РџРѕРєР°Р·С‹РІР°С‚СЊ Р±Р»РѕРє СЃ СЃР°РјС‹РјРё С‡Р°СЃС‚Рѕ РїСЂРѕРёРіСЂР°РЅРЅС‹РјРё С‚СЂРµРєР°РјРё Р·Р° С‚РµРєСѓС‰РёР№ РґРµРЅСЊ.",
-            topTracksCountLabel: "РџРѕРєР°Р·С‹РІР°С‚СЊ С‚СЂРµРєРѕРІ",
-            topTracksCountHint: "РЎРєРѕР»СЊРєРѕ С‚СЂРµРєРѕРІ РїРѕРєР°Р·С‹РІР°С‚СЊ РІ Р±Р»РѕРєРµ СЃРІРѕРґРєРё.",
-            topTracksPlayCount: "РїСЂРѕСЃР».",
-            historyTitle: "РСЃС‚РѕСЂРёСЏ",
-            dailyGoalLabel: "Daily Goal",
-            dailyGoalHint: "Goal in minutes. `0` disables the goal.",
-            dailyGoalUnit: "min",
-            dailyGoalProgress: "Р¦РµР»СЊ",
-            dailyGoalComplete: "Р¦РµР»СЊ РІС‹РїРѕР»РЅРµРЅР°",
-            retentionLabel: "РҐСЂР°РЅРёС‚СЊ РёСЃС‚РѕСЂРёСЋ",
-            retentionSuffix: "РјРµСЃСЏС†(РµРІ)",
-            retentionForeverLabel: "РҐСЂР°РЅРёС‚СЊ РёСЃС‚РѕСЂРёСЋ РІСЃРµРіРґР°",
-            retentionForeverHint: "РћС‚РєР»СЋС‡Р°РµС‚ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєСѓСЋ РѕС‡РёСЃС‚РєСѓ Р°СЂС…РёРІР°.",
-            retentionForeverValue: "Р’СЃРµРіРґР°",
-            retentionForeverWarning: "Р’РєР»СЋС‡РёС‚СЊ СЂРµР¶РёРј Forever? РСЃС‚РѕСЂРёСЏ РїРµСЂРµСЃС‚Р°РЅРµС‚ РѕС‡РёС‰Р°С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё Рё СЃРѕ РІСЂРµРјРµРЅРµРј РјРѕР¶РµС‚ Р·Р°РјРµС‚РЅРѕ СѓРІРµР»РёС‡РёС‚СЊ РѕР±СЉРµРј LocalStorage.",
-            toggleOn: "Р’РљР›",
-            toggleOff: "Р’Р«РљР›",
-            settingsTitle: "РќР°СЃС‚СЂРѕР№РєРё",
-            settingsBack: "РќР°Р·Р°Рґ",
-            languageLabel: "РЇР·С‹Рє",
-            popupModeLabel: "Р РµР¶РёРј popup",
-            popupModeHint: "Compact РґРµР»Р°РµС‚ popup РєРѕСЂРѕС‡Рµ, Full РїРѕРєР°Р·С‹РІР°РµС‚ РІСЃРµ СЃРµСЃСЃРёРё, РІСЃСЋ РёСЃС‚РѕСЂРёСЋ Рё weekly view.",
-            popupModeCompact: "Compact",
-            popupModeFull: "Full",
-            performanceModeLabel: "Р РµР¶РёРј РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊРЅРѕСЃС‚Рё",
-            performanceModeHint: "РћР±Р»РµРіС‡Р°РµС‚ popup Рё РІРёР·СѓР°Р»СЊРЅС‹Рµ СЌС„С„РµРєС‚С‹ РЅР° СЃР»Р°Р±С‹С… CPU/GPU.",
-            performanceModeDefault: "РћР±С‹С‡РЅС‹Р№",
-            performanceModeLightweight: "Р›РµРіРєРёР№",
-            pauseThresholdLabel: "РџРѕСЂРѕРі РїР°СѓР·С‹",
-            pauseThresholdHint: "Р§РµСЂРµР· СЃРєРѕР»СЊРєРѕ СЃРµРєСѓРЅРґ РїР°СѓР·С‹ С‚РµРєСѓС‰Р°СЏ СЃРµСЃСЃРёСЏ СЃС‡РёС‚Р°РµС‚СЃСЏ Р·Р°РІРµСЂС€РµРЅРЅРѕР№.",
-            streakShieldsLabel: "Р©РёС‚С‹ СЃРµСЂРёРё",
-            streakShieldsHint: "Р”Рѕ 4 РїСЂРѕРїСѓС‰РµРЅРЅС‹С… РґРЅРµР№ РІ РєР°Р»РµРЅРґР°СЂРЅРѕРј РјРµСЃСЏС†Рµ Р·Р°С‰РёС‰Р°СЋС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё Р±РµР· СЂРѕСЃС‚Р° СЃРµСЂРёРё.",
-            streakShieldsRemaining: "РћСЃС‚Р°Р»РѕСЃСЊ С‰РёС‚РѕРІ РІ СЌС‚РѕРј РјРµСЃСЏС†Рµ",
-            keepStreakLabel: "Keep streak",
-            keepStreakHint: "РЎРѕС…СЂР°РЅСЏРµС‚ С‚РµРєСѓС‰СѓСЋ СЃРµСЂРёСЋ Р±РµР· СЂРѕСЃС‚Р°, РїРѕРєР° СЂРµР¶РёРј РІРєР»СЋС‡РµРЅ.",
-            keepStreakProtectedToday: "РЎРµРіРѕРґРЅСЏ СЃРµСЂРёСЏ Р·Р°С‰РёС‰РµРЅР° РІСЂСѓС‡РЅСѓСЋ",
+            widgetTitle: "\u041D\u0430\u0436\u043C\u0438\u0442\u0435, \u0447\u0442\u043E\u0431\u044B \u0437\u0430\u043A\u0440\u0435\u043F\u0438\u0442\u044C \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043A\u0443",
+            popupTitle: "\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043A\u0430 \u043F\u043E \u0434\u043D\u044F\u043C",
+            popupHintPinned: "\u0417\u0430\u043A\u0440\u0435\u043F\u043B\u0435\u043D\u043E. \u041D\u0430\u0436\u043C\u0438\u0442\u0435, \u0447\u0442\u043E\u0431\u044B \u043E\u0442\u043A\u0440\u0435\u043F\u0438\u0442\u044C.",
+            popupHintHover: "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440. \u041D\u0430\u0436\u043C\u0438\u0442\u0435, \u0447\u0442\u043E\u0431\u044B \u0437\u0430\u043A\u0440\u0435\u043F\u0438\u0442\u044C.",
+            todayLabel: "\u0441\u0435\u0433\u043E\u0434\u043D\u044F",
+            emptyState: "\u041F\u043E\u043A\u0430 \u043D\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445 \u043F\u043E \u0434\u043D\u044F\u043C.",
+            sessionsTodayTitle: "\u0421\u0435\u0441\u0441\u0438\u0438 \u0441\u0435\u0433\u043E\u0434\u043D\u044F",
+            topTracksEmpty: "\u041F\u043E\u043A\u0430 \u043D\u0435\u0442 \u043F\u0440\u043E\u0441\u043B\u0443\u0448\u0438\u0432\u0430\u043D\u0438\u0439.",
+            topTracksToggleLabel: "\u0422\u043E\u043F-\u0442\u0440\u0435\u043A\u0438",
+            topTracksToggleHint: "\u041F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0442\u044C \u0431\u043B\u043E\u043A \u0441 \u0441\u0430\u043C\u044B\u043C\u0438 \u0447\u0430\u0441\u0442\u043E \u043F\u0440\u043E\u0438\u0433\u0440\u0430\u043D\u043D\u044B\u043C\u0438 \u0442\u0440\u0435\u043A\u0430\u043C\u0438 \u0437\u0430 \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u0434\u0435\u043D\u044C.",
+            topTracksCountLabel: "\u0422\u0440\u0435\u043A\u043E\u0432 \u0432 \u0431\u043B\u043E\u043A\u0435",
+            topTracksCountHint: "\u0421\u043A\u043E\u043B\u044C\u043A\u043E \u0442\u0440\u0435\u043A\u043E\u0432 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0442\u044C \u0432 \u0431\u043B\u043E\u043A\u0435 \u0441\u0432\u043E\u0434\u043A\u0438.",
+            topTracksPlayCount: "\u043F\u0440\u043E\u0441\u043B.",
+            historyTitle: "\u0418\u0441\u0442\u043E\u0440\u0438\u044F",
+            dailyGoalLabel: "\u0414\u043D\u0435\u0432\u043D\u0430\u044F \u0446\u0435\u043B\u044C",
+            dailyGoalHint: "\u0426\u0435\u043B\u044C \u0432 \u043C\u0438\u043D\u0443\u0442\u0430\u0445. `0` \u043E\u0442\u043A\u043B\u044E\u0447\u0430\u0435\u0442 \u0446\u0435\u043B\u044C.",
+            dailyGoalUnit: "\u043C\u0438\u043D",
+            dailyGoalProgress: "\u0426\u0435\u043B\u044C",
+            dailyGoalComplete: "\u0426\u0435\u043B\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430",
+            retentionLabel: "\u0425\u0440\u0430\u043D\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0440\u0438\u044E",
+            retentionSuffix: "\u043C\u0435\u0441\u044F\u0446(\u0435\u0432)",
+            retentionForeverLabel: "\u0425\u0440\u0430\u043D\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0440\u0438\u044E \u0432\u0441\u0435\u0433\u0434\u0430",
+            retentionForeverHint: "\u041E\u0442\u043A\u043B\u044E\u0447\u0430\u0435\u0442 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0443\u044E \u043E\u0447\u0438\u0441\u0442\u043A\u0443 \u0430\u0440\u0445\u0438\u0432\u0430.",
+            retentionForeverValue: "\u0412\u0441\u0435\u0433\u0434\u0430",
+            retentionForeverWarning: "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0440\u0435\u0436\u0438\u043C \u00AB\u0412\u0441\u0435\u0433\u0434\u0430\u00BB? \u0418\u0441\u0442\u043E\u0440\u0438\u044F \u043F\u0435\u0440\u0435\u0441\u0442\u0430\u043D\u0435\u0442 \u043E\u0447\u0438\u0449\u0430\u0442\u044C\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u0438 \u0441\u043E \u0432\u0440\u0435\u043C\u0435\u043D\u0435\u043C \u043C\u043E\u0436\u0435\u0442 \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0443\u0432\u0435\u043B\u0438\u0447\u0438\u0442\u044C \u043E\u0431\u044A\u0435\u043C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0445\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0430.",
+            toggleOn: "\u0412\u041A\u041B",
+            toggleOff: "\u0412\u042B\u041A\u041B",
+            settingsTitle: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438",
+            settingsBack: "\u041D\u0430\u0437\u0430\u0434",
+            languageLabel: "\u042F\u0437\u044B\u043A",
+            popupModeLabel: "\u0420\u0435\u0436\u0438\u043C \u043E\u043A\u043D\u0430",
+            popupModeHint: "\u041A\u043E\u043C\u043F\u0430\u043A\u0442\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C \u0434\u0435\u043B\u0430\u0435\u0442 \u043E\u043A\u043D\u043E \u043A\u043E\u0440\u043E\u0447\u0435, \u0430 \u043F\u043E\u043B\u043D\u044B\u0439 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442 \u0432\u0441\u0435 \u0441\u0435\u0441\u0441\u0438\u0438, \u0432\u0441\u044E \u0438\u0441\u0442\u043E\u0440\u0438\u044E \u0438 \u043D\u0435\u0434\u0435\u043B\u044C\u043D\u0443\u044E \u0441\u0432\u043E\u0434\u043A\u0443.",
+            popupModeCompact: "\u041A\u043E\u043C\u043F\u0430\u043A\u0442\u043D\u044B\u0439",
+            popupModeFull: "\u041F\u043E\u043B\u043D\u044B\u0439",
+            performanceModeLabel: "\u0420\u0435\u0436\u0438\u043C \u043F\u0440\u043E\u0438\u0437\u0432\u043E\u0434\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u0438",
+            performanceModeHint: "\u041E\u0431\u043B\u0435\u0433\u0447\u0430\u0435\u0442 \u043E\u043A\u043D\u043E \u0438 \u0432\u0438\u0437\u0443\u0430\u043B\u044C\u043D\u044B\u0435 \u044D\u0444\u0444\u0435\u043A\u0442\u044B \u043D\u0430 \u0441\u043B\u0430\u0431\u044B\u0445 CPU/GPU.",
+            performanceModeDefault: "\u041E\u0431\u044B\u0447\u043D\u044B\u0439",
+            performanceModeLightweight: "\u041E\u0431\u043B\u0435\u0433\u0447\u0435\u043D\u043D\u044B\u0439",
+            pauseThresholdLabel: "\u041F\u043E\u0440\u043E\u0433 \u043F\u0430\u0443\u0437\u044B",
+            pauseThresholdHint: "\u0427\u0435\u0440\u0435\u0437 \u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0441\u0435\u043A\u0443\u043D\u0434 \u043F\u0430\u0443\u0437\u044B \u0442\u0435\u043A\u0443\u0449\u0430\u044F \u0441\u0435\u0441\u0441\u0438\u044F \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043D\u043E\u0439.",
+            streakShieldsLabel: "\u0429\u0438\u0442\u044B \u0441\u0435\u0440\u0438\u0438",
+            streakShieldsHint: "\u0414\u043E 4 \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043D\u044B\u0445 \u0434\u043D\u0435\u0439 \u0432 \u043A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u043D\u043E\u043C \u043C\u0435\u0441\u044F\u0446\u0435 \u0437\u0430\u0449\u0438\u0449\u0430\u044E\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u0431\u0435\u0437 \u0440\u043E\u0441\u0442\u0430 \u0441\u0435\u0440\u0438\u0438.",
+            streakShieldsRemaining: "\u041E\u0441\u0442\u0430\u043B\u043E\u0441\u044C \u0449\u0438\u0442\u043E\u0432 \u0432 \u044D\u0442\u043E\u043C \u043C\u0435\u0441\u044F\u0446\u0435",
+            keepStreakLabel: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0441\u0435\u0440\u0438\u044E",
+            keepStreakHint: "\u0421\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442 \u0442\u0435\u043A\u0443\u0449\u0443\u044E \u0441\u0435\u0440\u0438\u044E \u0431\u0435\u0437 \u0440\u043E\u0441\u0442\u0430, \u043F\u043E\u043A\u0430 \u0440\u0435\u0436\u0438\u043C \u0432\u043A\u043B\u044E\u0447\u0435\u043D.",
+            keepStreakProtectedToday: "\u0421\u0435\u0433\u043E\u0434\u043D\u044F \u0441\u0435\u0440\u0438\u044F \u0437\u0430\u0449\u0438\u0449\u0435\u043D\u0430 \u0432\u0440\u0443\u0447\u043D\u0443\u044E",
             languageRu: "RU",
             languageEn: "EN",
-            streakLabel: "РЎРµСЂРёСЏ",
-            streakDays: "РґРЅ.",
-            streakProgressionLabel: "Р”Р»РёРЅРЅР°СЏ РїСЂРѕРіСЂРµСЃСЃРёСЏ СЃРµСЂРёРё",
-            streakProgressionHint: "Р”РѕР±Р°РІР»СЏРµС‚ Р±РѕР»СЊС€Рµ С†РІРµС‚РѕРІС‹С… СѓСЂРѕРІРЅРµР№ Рё РїРµСЂРµРЅРѕСЃРёС‚ Р±РµР»С‹Р№ РјР°РєСЃРёРјСѓРј РЅР° 500+.",
-            streakProgressionTiersLabel: "РђРєС‚РёРІРЅС‹Рµ СѓСЂРѕРІРЅРё",
-            badgeVisibilityLabel: "Р‘РµР№РґР¶РёРє",
-            badgeVisibilityHint: "РџРѕРєР°Р·С‹РІР°С‚СЊ Р±РµР№РґР¶РёРє РІ Р·Р°РіРѕР»РѕРІРєРµ popup.",
-            exportTitle: "Р­РєСЃРїРѕСЂС‚ РґР°РЅРЅС‹С…",
-            exportCsv: "РЎРєР°С‡Р°С‚СЊ CSV",
-            exportJson: "РЎРєР°С‡Р°С‚СЊ JSON",
-            importTitle: "РРјРїРѕСЂС‚ РёР· JSON",
-            importHint: "Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ РёР»Рё РѕР±СЉРµРґРёРЅРёС‚СЊ РґР°РЅРЅС‹Рµ РёР· СЂР°РЅРµРµ СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°РЅРЅРѕРіРѕ JSON.",
-            importMerge: "РњРµСЂРґР¶",
-            importReplace: "Р—Р°РјРµРЅРёС‚СЊ",
-            importReadError: "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ JSON-С„Р°Р№Р».",
-            importInvalid: "РРјРїРѕСЂС‚ РѕС‚РєР»РѕРЅРµРЅ: РѕР¶РёРґР°РµС‚СЃСЏ JSON РІ С„РѕСЂРјР°С‚Рµ export (РґР°С‚Р° -> totalSeconds / intervals).",
-            importTooLarge: "РРјРїРѕСЂС‚ РѕС‚РєР»РѕРЅРµРЅ: С„Р°Р№Р» СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕР№.",
-            importTooManyDays: "РРјРїРѕСЂС‚ РѕС‚РєР»РѕРЅРµРЅ: СЃР»РёС€РєРѕРј РјРЅРѕРіРѕ РґРЅРµР№ РІ С„Р°Р№Р»Рµ.",
-            importTooManyIntervals: "РРјРїРѕСЂС‚ РѕС‚РєР»РѕРЅРµРЅ: СЃР»РёС€РєРѕРј РјРЅРѕРіРѕ РёРЅС‚РµСЂРІР°Р»РѕРІ РІ РѕРґРЅРѕРј РґРЅРµ.",
-            importConfirmMerge: "РРјРїРѕСЂС‚ JSON СЃ РѕР±СЉРµРґРёРЅРµРЅРёРµРј?",
-            importConfirmReplace: "РРјРїРѕСЂС‚ JSON СЃ РїРѕР»РЅРѕР№ Р·Р°РјРµРЅРѕР№?",
-            importPreviewDays: "Р”РЅРµР№ РІ С„Р°Р№Р»Рµ",
-            importPreviewAffected: "Р—Р°С‚СЂРѕРЅСѓС‚Рѕ РґРЅРµР№",
-            importPreviewConflicts: "РџРµСЂРµСЃРµС‡РµРЅРёР№",
-            importPreviewImportedTotal: "Р’СЂРµРјСЏ РІ С„Р°Р№Р»Рµ",
-            importPreviewResultTotal: "РС‚РѕРі РїРѕСЃР»Рµ РёРјРїРѕСЂС‚Р°",
-            importSuccessMerge: "РРјРїРѕСЂС‚ Р·Р°РІРµСЂС€РµРЅ: РґР°РЅРЅС‹Рµ РѕР±СЉРµРґРёРЅРµРЅС‹.",
-            importSuccessReplace: "РРјРїРѕСЂС‚ Р·Р°РІРµСЂС€РµРЅ: РґР°РЅРЅС‹Рµ Р·Р°РјРµРЅРµРЅС‹.",
-            updateCheckTitle: "РџСЂРѕРІРµСЂРєР° РѕР±РЅРѕРІР»РµРЅРёР№",
-            updateCheckHint: "РџСЂРѕРІРµСЂРёС‚СЊ РЅР°Р»РёС‡РёРµ РЅРѕРІРѕР№ РІРµСЂСЃРёРё РІСЂСѓС‡РЅСѓСЋ.",
-            updateCheckButton: "РџСЂРѕРІРµСЂРёС‚СЊ",
-            updateCheckCurrent: "РЈ РІР°СЃ СѓР¶Рµ РїРѕСЃР»РµРґРЅСЏСЏ РІРµСЂСЃРёСЏ.",
-            updateCheckFailed: "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ РѕР±РЅРѕРІР»РµРЅРёСЏ РїСЂСЏРјРѕ СЃРµР№С‡Р°СЃ.",
-            resetDataTitle: "РћС‡РёСЃС‚РєР° / РЎР±СЂРѕСЃ РґР°РЅРЅС‹С…",
-            resetDataHint: "Р”РµР№СЃС‚РІРёСЏ РЅРµРѕР±СЂР°С‚РёРјС‹. РџРµСЂРµРґ РїРѕР»РЅС‹Рј СЃР±СЂРѕСЃРѕРј Р»СѓС‡С€Рµ СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ РґР°РЅРЅС‹Рµ.",
-            resetToday: "РЎР±СЂРѕСЃРёС‚СЊ СЃРµРіРѕРґРЅСЏ",
-            clearHistory: "РћС‡РёСЃС‚РёС‚СЊ РёСЃС‚РѕСЂРёСЋ",
-            fullWipe: "РџРѕР»РЅС‹Р№ СЃР±СЂРѕСЃ",
-            weeklyToggle: "РќРµРґРµР»СЏ",
-            weeklyToggleTitle: "РџРѕРєР°Р·Р°С‚СЊ РЅРµРґРµР»СЊРЅСѓСЋ СЃРІРѕРґРєСѓ",
-            weeklyRangeLabel: "РџРѕСЃР»РµРґРЅРёРµ 7 РґРЅРµР№",
-            weeklySummaryTitle: "РќРµРґРµР»СЊРЅР°СЏ СЃРІРѕРґРєР°",
-            weeklyAverageLabel: "РЎСЂРµРґРЅРµРµ РІ РґРµРЅСЊ",
-            weeklyBestDayLabel: "РЎР°РјС‹Р№ Р°РєС‚РёРІРЅС‹Р№ РґРµРЅСЊ",
-            weeklyBestDayEmpty: "РќРµС‚ РґР°РЅРЅС‹С…",
-            yesterdayVsTodayTitle: "Yesterday vs Today",
-            yesterdayVsTodaySwitchTitle: "РџРµСЂРµРєР»СЋС‡РёС‚СЊ weekly section",
-            comparisonTodayLabel: "РЎРµРіРѕРґРЅСЏ",
-            comparisonYesterdayLabel: "Р’С‡РµСЂР°",
-            comparisonDeltaLabel: "Р Р°Р·РЅРёС†Р°",
-            comparisonNoYesterday: "Р’С‡РµСЂР° РґР°РЅРЅС‹С… РЅРµС‚",
-            confirmResetToday: "РЎР±СЂРѕСЃРёС‚СЊ РґР°РЅРЅС‹Рµ Р·Р° СЃРµРіРѕРґРЅСЏ? РСЃС‚РѕСЂРёСЏ РѕСЃС‚Р°РЅРµС‚СЃСЏ РЅРµС‚СЂРѕРЅСѓС‚РѕР№.",
-            confirmClearHistory: "РћС‡РёСЃС‚РёС‚СЊ РІСЃСЋ Р°СЂС…РёРІРЅСѓСЋ РёСЃС‚РѕСЂРёСЋ? Р”Р°РЅРЅС‹Рµ Р·Р° СЃРµРіРѕРґРЅСЏ РѕСЃС‚Р°РЅСѓС‚СЃСЏ.",
-            confirmFullWipe: "РџРѕР»РЅРѕСЃС‚СЊСЋ СѓРґР°Р»РёС‚СЊ РІСЃРµ РґР°РЅРЅС‹Рµ Daily Time Tracker Рё СЃР±СЂРѕСЃРёС‚СЊ РЅР°СЃС‚СЂРѕР№РєРё?",
-            updateBadge: "РћР‘РќРћР’Р›Р•РќРР•",
-            updateTitle: "Р”РѕСЃС‚СѓРїРЅРѕ РѕР±РЅРѕРІР»РµРЅРёРµ Daily Time Tracker",
-            updateSubtitle: "РџРµСЂРµР·Р°РіСЂСѓР·РёС‚Рµ Spotify РґР»СЏ РїСЂРёРјРµРЅРµРЅРёСЏ РѕР±РЅРѕРІР»РµРЅРёСЏ.",
-            updateVersionLabel: "Р’Р•Р РЎРРЇ",
-            updateBtnRestart: "РџРµСЂРµР·Р°РїСѓСЃС‚РёС‚СЊ",
-            updateBtnReleaseNotes: "Р§С‚Рѕ РЅРѕРІРѕРіРѕ",
+            streakLabel: "\u0421\u0435\u0440\u0438\u044F",
+            streakDays: "\u0434\u043D.",
+            streakProgressionLabel: "\u0414\u043B\u0438\u043D\u043D\u0430\u044F \u043F\u0440\u043E\u0433\u0440\u0435\u0441\u0441\u0438\u044F \u0441\u0435\u0440\u0438\u0438",
+            streakProgressionHint: "\u0414\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442 \u0431\u043E\u043B\u044C\u0448\u0435 \u0446\u0432\u0435\u0442\u043E\u0432\u044B\u0445 \u0443\u0440\u043E\u0432\u043D\u0435\u0439 \u0438 \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u0438\u0442 \u0431\u0435\u043B\u044B\u0439 \u043C\u0430\u043A\u0441\u0438\u043C\u0443\u043C \u043D\u0430 500+.",
+            streakProgressionTiersLabel: "\u0410\u043A\u0442\u0438\u0432\u043D\u044B\u0435 \u0443\u0440\u043E\u0432\u043D\u0438",
+            badgeVisibilityLabel: "\u0411\u0435\u0439\u0434\u0436",
+            badgeVisibilityHint: "\u041F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0442\u044C \u0431\u0435\u0439\u0434\u0436\u0438\u043A \u0432 \u0437\u0430\u0433\u043E\u043B\u043E\u0432\u043A\u0435 \u043E\u043A\u043D\u0430.",
+            exportTitle: "\u042D\u043A\u0441\u043F\u043E\u0440\u0442 \u0434\u0430\u043D\u043D\u044B\u0445",
+            exportCsv: "\u0421\u043A\u0430\u0447\u0430\u0442\u044C CSV",
+            exportJson: "\u0421\u043A\u0430\u0447\u0430\u0442\u044C JSON",
+            importTitle: "\u0418\u043C\u043F\u043E\u0440\u0442 \u0438\u0437 JSON",
+            importHint: "\u0412\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u0438\u043B\u0438 \u043E\u0431\u044A\u0435\u0434\u0438\u043D\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435 \u0438\u0437 \u0440\u0430\u043D\u0435\u0435 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u043E\u0433\u043E JSON.",
+            importMerge: "\u041C\u0435\u0440\u0434\u0436",
+            importReplace: "\u0417\u0430\u043C\u0435\u043D\u0438\u0442\u044C",
+            importReadError: "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0442\u044C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 JSON-\u0444\u0430\u0439\u043B.",
+            importInvalid: "\u0418\u043C\u043F\u043E\u0440\u0442 \u043E\u0442\u043A\u043B\u043E\u043D\u0435\u043D: \u043E\u0436\u0438\u0434\u0430\u0435\u0442\u0441\u044F JSON \u0432 \u0444\u043E\u0440\u043C\u0430\u0442\u0435 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0430 (\u0434\u0430\u0442\u0430 -> totalSeconds / intervals).",
+            importTooLarge: "\u0418\u043C\u043F\u043E\u0440\u0442 \u043E\u0442\u043A\u043B\u043E\u043D\u0435\u043D: \u0444\u0430\u0439\u043B \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0439.",
+            importTooManyDays: "\u0418\u043C\u043F\u043E\u0440\u0442 \u043E\u0442\u043A\u043B\u043E\u043D\u0435\u043D: \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u0434\u043D\u0435\u0439 \u0432 \u0444\u0430\u0439\u043B\u0435.",
+            importTooManyIntervals: "\u0418\u043C\u043F\u043E\u0440\u0442 \u043E\u0442\u043A\u043B\u043E\u043D\u0435\u043D: \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u0438\u043D\u0442\u0435\u0440\u0432\u0430\u043B\u043E\u0432 \u0432 \u043E\u0434\u043D\u043E\u043C \u0434\u043D\u0435.",
+            importConfirmMerge: "\u0418\u043C\u043F\u043E\u0440\u0442 JSON \u0441 \u043E\u0431\u044A\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435\u043C?",
+            importConfirmReplace: "\u0418\u043C\u043F\u043E\u0440\u0442 JSON \u0441 \u043F\u043E\u043B\u043D\u043E\u0439 \u0437\u0430\u043C\u0435\u043D\u043E\u0439?",
+            importPreviewDays: "\u0414\u043D\u0435\u0439 \u0432 \u0444\u0430\u0439\u043B\u0435",
+            importPreviewAffected: "\u0417\u0430\u0442\u0440\u043E\u043D\u0443\u0442\u043E \u0434\u043D\u0435\u0439",
+            importPreviewConflicts: "\u041F\u0435\u0440\u0435\u0441\u0435\u0447\u0435\u043D\u0438\u0439",
+            importPreviewImportedTotal: "\u0412\u0440\u0435\u043C\u044F \u0432 \u0444\u0430\u0439\u043B\u0435",
+            importPreviewResultTotal: "\u0418\u0442\u043E\u0433 \u043F\u043E\u0441\u043B\u0435 \u0438\u043C\u043F\u043E\u0440\u0442\u0430",
+            importSuccessMerge: "\u0418\u043C\u043F\u043E\u0440\u0442 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D: \u0434\u0430\u043D\u043D\u044B\u0435 \u043E\u0431\u044A\u0435\u0434\u0438\u043D\u0435\u043D\u044B.",
+            importSuccessReplace: "\u0418\u043C\u043F\u043E\u0440\u0442 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D: \u0434\u0430\u043D\u043D\u044B\u0435 \u0437\u0430\u043C\u0435\u043D\u0435\u043D\u044B.",
+            updateCheckTitle: "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0439",
+            updateCheckHint: "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u043D\u0430\u043B\u0438\u0447\u0438\u0435 \u043D\u043E\u0432\u043E\u0439 \u0432\u0435\u0440\u0441\u0438\u0438 \u0432\u0440\u0443\u0447\u043D\u0443\u044E.",
+            updateCheckButton: "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C",
+            updateCheckCurrent: "\u0423 \u0432\u0430\u0441 \u0443\u0436\u0435 \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F \u0432\u0435\u0440\u0441\u0438\u044F.",
+            updateCheckFailed: "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u043F\u0440\u044F\u043C\u043E \u0441\u0435\u0439\u0447\u0430\u0441.",
+            resetDataTitle: "\u041E\u0447\u0438\u0441\u0442\u043A\u0430 / \u0421\u0431\u0440\u043E\u0441 \u0434\u0430\u043D\u043D\u044B\u0445",
+            resetDataHint: "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044F \u043D\u0435\u043E\u0431\u0440\u0430\u0442\u0438\u043C\u044B. \u041F\u0435\u0440\u0435\u0434 \u043F\u043E\u043B\u043D\u044B\u043C \u0441\u0431\u0440\u043E\u0441\u043E\u043C \u043B\u0443\u0447\u0448\u0435 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435.",
+            resetToday: "\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F",
+            clearHistory: "\u041E\u0447\u0438\u0441\u0442\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0440\u0438\u044E",
+            fullWipe: "\u041F\u043E\u043B\u043D\u044B\u0439 \u0441\u0431\u0440\u043E\u0441",
+            weeklyToggle: "\u041D\u0435\u0434\u0435\u043B\u044F",
+            weeklyToggleTitle: "\u041F\u043E\u043A\u0430\u0437\u0430\u0442\u044C \u043D\u0435\u0434\u0435\u043B\u044C\u043D\u0443\u044E \u0441\u0432\u043E\u0434\u043A\u0443",
+            weeklyRangeLabel: "\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 7 \u0434\u043D\u0435\u0439",
+            weeklySummaryTitle: "\u041D\u0435\u0434\u0435\u043B\u044C\u043D\u0430\u044F \u0441\u0432\u043E\u0434\u043A\u0430",
+            weeklyAverageLabel: "\u0421\u0440\u0435\u0434\u043D\u0435\u0435 \u0432 \u0434\u0435\u043D\u044C",
+            weeklyBestDayLabel: "\u0421\u0430\u043C\u044B\u0439 \u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0439 \u0434\u0435\u043D\u044C",
+            weeklyBestDayEmpty: "\u041D\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445",
+            yesterdayVsTodayTitle: "\u0412\u0447\u0435\u0440\u0430 \u0438 \u0441\u0435\u0433\u043E\u0434\u043D\u044F",
+            yesterdayVsTodaySwitchTitle: "\u041F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u043D\u0435\u0434\u0435\u043B\u044C\u043D\u044B\u0439 \u0440\u0430\u0437\u0434\u0435\u043B",
+            comparisonTodayLabel: "\u0421\u0435\u0433\u043E\u0434\u043D\u044F",
+            comparisonYesterdayLabel: "\u0412\u0447\u0435\u0440\u0430",
+            comparisonDeltaLabel: "\u0420\u0430\u0437\u043D\u0438\u0446\u0430",
+            comparisonNoYesterday: "\u0412\u0447\u0435\u0440\u0430 \u0434\u0430\u043D\u043D\u044B\u0445 \u043D\u0435\u0442",
+            showAllSessions: "\u041F\u043E\u043A\u0430\u0437\u0430\u0442\u044C \u0432\u0441\u0435 \u0441\u0435\u0441\u0441\u0438\u0438",
+            hideExtraSessions: "\u0421\u043A\u0440\u044B\u0442\u044C \u043B\u0438\u0448\u043D\u0438\u0435 \u0441\u0435\u0441\u0441\u0438\u0438",
+            showAllDays: "\u041F\u043E\u043A\u0430\u0437\u0430\u0442\u044C \u0432\u0441\u0435 \u0434\u043D\u0438",
+            hideExtraDays: "\u0421\u043A\u0440\u044B\u0442\u044C \u043B\u0438\u0448\u043D\u0438\u0435 \u0434\u043D\u0438",
+            closeButton: "\u0417\u0430\u043A\u0440\u044B\u0442\u044C",
+            confirmResetToday: "\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435 \u0437\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F? \u0418\u0441\u0442\u043E\u0440\u0438\u044F \u043E\u0441\u0442\u0430\u043D\u0435\u0442\u0441\u044F \u043D\u0435\u0442\u0440\u043E\u043D\u0443\u0442\u043E\u0439.",
+            confirmClearHistory: "\u041E\u0447\u0438\u0441\u0442\u0438\u0442\u044C \u0432\u0441\u044E \u0430\u0440\u0445\u0438\u0432\u043D\u0443\u044E \u0438\u0441\u0442\u043E\u0440\u0438\u044E? \u0414\u0430\u043D\u043D\u044B\u0435 \u0437\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u043E\u0441\u0442\u0430\u043D\u0443\u0442\u0441\u044F.",
+            confirmFullWipe: "\u041F\u043E\u043B\u043D\u043E\u0441\u0442\u044C\u044E \u0443\u0434\u0430\u043B\u0438\u0442\u044C \u0432\u0441\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 Daily Time Tracker \u0438 \u0441\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438?",
+            updateBadge: "\u041E\u0411\u041D\u041E\u0412\u041B\u0415\u041D\u0418\u0415",
+            updateTitle: "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 Daily Time Tracker",
+            updateSubtitle: "\u041F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 Spotify \u0434\u043B\u044F \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F.",
+            updateVersionLabel: "\u0412\u0415\u0420\u0421\u0418\u042F",
+            updateBtnRestart: "\u041F\u0435\u0440\u0435\u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C",
+            updateBtnReleaseNotes: "\u0427\u0442\u043E \u043D\u043E\u0432\u043E\u0433\u043E",
             apiUnavailableBadge: "API",
-            apiUnavailableTitle: "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ Рє API Daily Time Tracker",
-            apiUnavailableSubtitle: "РЎРєСЂРёРїС‚ РїСЂРѕРґРѕР»Р¶РёС‚ СЂР°Р±РѕС‚Р°С‚СЊ РєР°Рє СЂР°РЅСЊС€Рµ. РџРѕРІС‚РѕСЂРЅР°СЏ РїСЂРѕРІРµСЂРєР° Р±СѓРґРµС‚ РІС‹РїРѕР»РЅРµРЅР° Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё."
+            apiUnavailableTitle: "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u0442\u044C\u0441\u044F \u043A API Daily Time Tracker",
+            apiUnavailableSubtitle: "\u0421\u043A\u0440\u0438\u043F\u0442 \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442 \u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \u043A\u0430\u043A \u0440\u0430\u043D\u044C\u0448\u0435. \u041F\u043E\u0432\u0442\u043E\u0440\u043D\u0430\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0431\u0443\u0434\u0435\u0442 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438."
         },
         en: {
             widgetTitle: "Click to pin statistics",
@@ -497,6 +506,11 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             comparisonYesterdayLabel: "Yesterday",
             comparisonDeltaLabel: "Difference",
             comparisonNoYesterday: "No data yesterday",
+            showAllSessions: "Show all sessions",
+            hideExtraSessions: "Hide extra sessions",
+            showAllDays: "Show all days",
+            hideExtraDays: "Hide extra days",
+            closeButton: "Close",
             confirmResetToday: "Reset today's data? History will be kept.",
             confirmClearHistory: "Clear all archived history? Today's data will be kept.",
             confirmFullWipe: "Delete all Daily Time Tracker data and reset settings?",
@@ -564,7 +578,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     checkApiAvailability();
     state.runtime.apiHealthCheckIntervalId = setInterval(checkApiAvailability, CONFIG.apiHealthCheckIntervalMs);
 
-    // РІвЂќР‚РІвЂќР‚ TEMP: test streak colors РІвЂќР‚РІвЂќР‚
+    // \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A TEMP: test streak colors \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A
     window.dttSetStreak = function (n) {
         state.runtime._streakTestMode = true;
         state.streak.current = Number(n) || 0;
@@ -617,10 +631,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         if (state.language === "ru") {
             const mod10 = n % 10;
             const mod100 = n % 100;
-            if (mod100 >= 11 && mod100 <= 19) return "РјРµСЃСЏС†РµРІ";
-            if (mod10 === 1) return "РјРµСЃСЏС†";
-            if (mod10 >= 2 && mod10 <= 4) return "РјРµСЃСЏС†Р°";
-            return "РјРµСЃСЏС†РµРІ";
+            if (mod100 >= 11 && mod100 <= 19) return "\u043C\u0435\u0441\u044F\u0446\u0435\u0432";
+            if (mod10 === 1) return "\u043C\u0435\u0441\u044F\u0446";
+            if (mod10 >= 2 && mod10 <= 4) return "\u043C\u0435\u0441\u044F\u0446\u0430";
+            return "\u043C\u0435\u0441\u044F\u0446\u0435\u0432";
         }
         return n === 1 ? "month" : "months";
     }
@@ -1422,7 +1436,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         if (state.language === "en") {
             return {
                 title: "Channel",
-                hint: "Release is stable. Test and Dev may contain bugs. Reload Spotify after switching.",
+                hint: "Release is stable. Test may contain bugs. Dev is available only to selected testers and may be even less stable. Reload Spotify after switching.",
                 release: "Release",
                 test: "Test",
                 dev: "Dev",
@@ -1434,18 +1448,19 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         return {
             title: "\u0412\u0435\u0440\u0441\u0438\u044f",
-            hint: "\u0052\u0065\u006c\u0065\u0061\u0073\u0065 \u043f\u043e\u0441\u0442\u0430\u0431\u0438\u043b\u044c\u043d\u0435\u0435. Test \u0438 Dev \u043c\u043e\u0433\u0443\u0442 \u0441\u043e\u0434\u0435\u0440\u0436\u0430\u0442\u044c \u0431\u0430\u0433\u0438. \u041f\u043e\u0441\u043b\u0435 \u043f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f \u043d\u0443\u0436\u043d\u0430 \u043f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0430 Spotify.",
-            release: "Release",
-            test: "Test",
-            dev: "Dev",
-            confirmRelease: "\u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f \u043d\u0430 Release \u0438 \u0441\u0440\u0430\u0437\u0443 \u043f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c Spotify?",
-            confirmTest: "\u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f \u043d\u0430 Test \u0438 \u0441\u0440\u0430\u0437\u0443 \u043f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c Spotify?",
-            confirmDev: "\u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f \u043d\u0430 Dev \u0438 \u0441\u0440\u0430\u0437\u0443 \u043f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c Spotify?"
+            hint: "\u0420\u0435\u043B\u0438\u0437 \u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u0435\u0435. \u0422\u0435\u0441\u0442 \u043C\u043E\u0436\u0435\u0442 \u0441\u043E\u0434\u0435\u0440\u0436\u0430\u0442\u044C \u0431\u0430\u0433\u0438, \u0430 \u0414\u0435\u0432 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u0442\u043E\u043B\u044C\u043A\u043E \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u043C \u0442\u0435\u0441\u0442\u0435\u0440\u0430\u043C \u0438 \u043C\u043E\u0436\u0435\u0442 \u0431\u044B\u0442\u044C \u0435\u0449\u0435 \u043C\u0435\u043D\u0435\u0435 \u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u044B\u043C. \u041F\u043E\u0441\u043B\u0435 \u043F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u043D\u0443\u0436\u043D\u0430 \u043F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0430 Spotify.",
+            release: "\u0420\u0435\u043B\u0438\u0437",
+            test: "\u0422\u0435\u0441\u0442",
+            dev: "\u0414\u0435\u0432",
+            confirmRelease: "\u041F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0438\u0442\u044C\u0441\u044F \u043D\u0430 \u0440\u0435\u043B\u0438\u0437 \u0438 \u0441\u0440\u0430\u0437\u0443 \u043F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C Spotify?",
+            confirmTest: "\u041F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0438\u0442\u044C\u0441\u044F \u043D\u0430 \u0442\u0435\u0441\u0442 \u0438 \u0441\u0440\u0430\u0437\u0443 \u043F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C Spotify?",
+            confirmDev: "\u041F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0438\u0442\u044C\u0441\u044F \u043D\u0430 \u0434\u0435\u0432 \u0438 \u0441\u0440\u0430\u0437\u0443 \u043F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C Spotify?"
         };
     }
 
     function getTestChannelWarningText() {
         const channelName = CHANNEL === "dev" ? "Dev" : "Test";
+        const channelNameRu = CHANNEL === "dev" ? "\u0414\u0435\u0432" : "\u0422\u0435\u0441\u0442";
         const isDev = CHANNEL === "dev";
         if (state.language === "en") {
             return {
@@ -1460,9 +1475,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         }
 
         return {
-            badge: `${channelName.toUpperCase()} \u0412\u0415\u0420\u0421\u0418\u042f`,
-            title: `\u0412\u044b \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u0442\u0435 ${channelName} \u0432\u0435\u0440\u0441\u0438\u044e`,
-            subtitle: "\u0412 \u044d\u0442\u043e\u0439 \u0441\u0431\u043e\u0440\u043a\u0435 \u043c\u043e\u0433\u0443\u0442 \u0431\u044b\u0442\u044c \u0431\u0430\u0433\u0438, \u043d\u0435\u0434\u043e\u0434\u0435\u043b\u0430\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u0438\u043b\u0438 \u043d\u0435\u0441\u0442\u0430\u0431\u0438\u043b\u044c\u043d\u043e\u0435 \u043f\u043e\u0432\u0435\u0434\u0435\u043d\u0438\u0435. \u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0439\u0442\u0435 \u0435\u0435, \u0435\u0441\u043b\u0438 \u0433\u043e\u0442\u043e\u0432\u044b \u0442\u0435\u0441\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043d\u043e\u0432\u044b\u0435 \u0444\u0443\u043d\u043a\u0446\u0438\u0438.",
+            badge: `${channelNameRu.toUpperCase()} \u0412\u0415\u0420\u0421\u0418\u042F`,
+            title: `\u0412\u044B \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442\u0435 ${channelNameRu.toLowerCase()}-\u0432\u0435\u0440\u0441\u0438\u044E`,
+            subtitle: "\u0412 \u044D\u0442\u043E\u0439 \u0441\u0431\u043E\u0440\u043A\u0435 \u043C\u043E\u0433\u0443\u0442 \u0431\u044B\u0442\u044C \u0431\u0430\u0433\u0438, \u043D\u0435\u0434\u043E\u0434\u0435\u043B\u0430\u043D\u043D\u044B\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u0438\u043B\u0438 \u043D\u0435\u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u0435 \u043F\u043E\u0432\u0435\u0434\u0435\u043D\u0438\u0435. \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439\u0442\u0435 \u0435\u0435, \u0435\u0441\u043B\u0438 \u0433\u043E\u0442\u043E\u0432\u044B \u0442\u0435\u0441\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u043D\u043E\u0432\u044B\u0435 \u0444\u0443\u043D\u043A\u0446\u0438\u0438.",
             button: "\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c",
             badgeColor: isDev ? "#ef4444" : "#f59e0b",
             badgeBorder: isDev ? "rgba(239, 68, 68, 0.4)" : "rgba(245, 158, 11, 0.4)",
@@ -1548,7 +1563,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         closeBtn.type = "button";
         closeBtn.className = "dtt-update-close";
         closeBtn.innerHTML = "&#x2715;";
-        closeBtn.title = "Close";
+        closeBtn.title = t("closeButton");
         closeBtn.addEventListener("click", (event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -1556,7 +1571,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         });
 
         const badge = document.createElement("span");
-        badge.className = "dtt-update-badge";
+        badge.className = "dtt-update-badge dtt-api-unavailable-badge";
         badge.textContent = text.badge;
         badge.style.cssText = `
             display: inline-block;
@@ -1995,14 +2010,19 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     async function fetchApiHealthStatus() {
         try {
             const uid = Spicetify.Platform?.username || "healthcheck";
-            const res = await fetch(`${CONFIG.badgeApiBaseUrl}?uid=${encodeURIComponent(uid)}&t=${Date.now()}`);
-            return res.ok || res.status === 204;
+            const cacheBuster = Date.now();
+            const [badgeRes, devChannelRes] = await Promise.all([
+                fetch(`${CONFIG.badgeApiBaseUrl}?uid=${encodeURIComponent(uid)}&t=${cacheBuster}`),
+                fetch(`${CONFIG.devChannelApiBaseUrl}?uid=${encodeURIComponent(uid)}&t=${cacheBuster}`)
+            ]);
+            const badgeOk = badgeRes.ok || badgeRes.status === 204;
+            return badgeOk && devChannelRes.ok;
         } catch (_) {
             return false;
         }
     }
 
-    // РІвЂќР‚РІвЂќР‚ Update check РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+    // \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Update check \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A
 
     function loadStoredVersion() {
         return Spicetify.LocalStorage.get(CONFIG.versionKey) || "";
@@ -2111,7 +2131,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const closeBtn = document.createElement("button");
         closeBtn.className = "dtt-update-close";
         closeBtn.innerHTML = "&#x2715;";
-        closeBtn.title = "Close";
+        closeBtn.title = t("closeButton");
         closeBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             hideUpdateModal();
@@ -2200,7 +2220,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         closeBtn.type = "button";
         closeBtn.className = "dtt-update-status-toast-close";
         closeBtn.innerHTML = "&#x2715;";
-        closeBtn.title = "Close";
+        closeBtn.title = t("closeButton");
         closeBtn.addEventListener("click", () => {
             hideUpdateStatusToast();
         });
@@ -2273,8 +2293,28 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const isAvailable = await fetchApiHealthStatus();
 
         if (isAvailable) {
-            console.log("[DailyTimeTracker] API connection OK.");
+            if (state.runtime.apiHealthWasAvailable === false) {
+                console.log("[DailyTimeTracker] API connection restored.");
+            } else {
+                console.log("[DailyTimeTracker] API connection OK.");
+            }
+            state.runtime.apiHealthFailureCount = 0;
+            state.runtime.apiHealthWasAvailable = true;
+            state.runtime.apiUnavailableDismissed = false;
             hideApiUnavailableModal();
+            return;
+        }
+
+        state.runtime.apiHealthFailureCount += 1;
+        state.runtime.apiHealthWasAvailable = false;
+
+        if (state.runtime.apiHealthFailureCount < CONFIG.apiHealthFailureThreshold) {
+            console.log("[DailyTimeTracker] API health check failed once. Waiting for confirmation before showing the modal.");
+            return;
+        }
+
+        if (state.runtime.apiUnavailableDismissed) {
+            console.log("[DailyTimeTracker] API is still unavailable, but the modal was already dismissed for the current outage.");
             return;
         }
 
@@ -2306,9 +2346,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const closeBtn = document.createElement("button");
         closeBtn.className = "dtt-update-close";
         closeBtn.innerHTML = "&#x2715;";
-        closeBtn.title = "Close";
+        closeBtn.title = t("closeButton");
         closeBtn.addEventListener("click", (e) => {
             e.stopPropagation();
+            state.runtime.apiUnavailableDismissed = true;
             hideApiUnavailableModal();
         });
 
@@ -2332,6 +2373,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         overlay.appendChild(modal);
         overlay.addEventListener("click", (e) => {
             if (e.target === overlay) {
+                state.runtime.apiUnavailableDismissed = true;
                 hideApiUnavailableModal();
             }
         });
@@ -2353,7 +2395,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         return getActiveStreakTiers()
             .filter((tier) => !tier.hidden)
             .map((tier) => `${tier.min}+`)
-            .join(" вЂў ");
+            .join(" \u0432\u0402\u045E ");
     }
 
     function getStreakColor() {
@@ -2438,7 +2480,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         saveSessionTrackData(now);
     }
 
-    // РІвЂќР‚РІвЂќР‚ Export helpers РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+    // \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Export helpers \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A
     function getExportData() {
         const history = readHistory();
         const todayTotal = getComputedDayTotalSeconds();
@@ -2969,7 +3011,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const style = document.createElement("style");
         style.id = "dtt-styles";
         style.textContent = `
-            /* РІвЂќР‚РІвЂќР‚ Widget pill РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Widget pill \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             #dtt-widget {
                 display: inline-flex;
                 align-items: center;
@@ -3008,7 +3050,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 box-shadow: none;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Fire icon (popup) РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Fire icon (popup) \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-fire-wrap {
                 display: inline-flex;
                 align-items: center;
@@ -3071,7 +3113,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 box-shadow: none;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Timer text РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Timer text \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             #dtt-time {
                 min-width: 72px;
                 text-align: center;
@@ -3113,7 +3155,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 color: #1ed760;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Popup container РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Popup container \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             #dtt-hover-popup {
                 position: fixed;
                 z-index: 10000;
@@ -3162,7 +3204,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 max-height: min(76vh, 780px);
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Header block РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Header block \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-popup-header {
                 display: flex;
                 justify-content: space-between;
@@ -3214,7 +3256,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 flex-shrink: 0;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Language switcher РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Language switcher \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-language-switcher {
                 display: inline-flex;
                 align-items: center;
@@ -3287,7 +3329,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 margin-top: 10px;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Hint line РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Hint line \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-popup-hint {
                 color: #555;
                 font-size: 11px;
@@ -3341,7 +3383,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 color: #1ed760;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Retention control РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Retention control \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-retention-control {
                 display: inline-flex;
                 align-items: center;
@@ -3371,7 +3413,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 color: #fff;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Summary card РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Summary card \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-popup-summary {
                 display: flex;
                 flex-direction: column;
@@ -3490,7 +3532,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 font-size: 10px;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Sections wrapper (scrollable body) РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Sections wrapper (scrollable body) \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-popup-section {
                 display: flex;
                 flex-direction: column;
@@ -3514,7 +3556,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 display: none;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Section headers РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Section headers \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-popup-section-title {
                 font-size: 10.5px;
                 font-weight: 700;
@@ -3551,7 +3593,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 min-height: 0;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Sessions list РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Sessions list \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-intervals-list {
                 overflow-y: auto;
                 min-height: 0;
@@ -3579,7 +3621,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 border-radius: 999px;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Toggle button РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Toggle button \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-today-sessions-toggle {
                 display: inline-flex;
                 align-items: center;
@@ -3611,7 +3653,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Row items РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Row items \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-interval-item {
                 display: flex;
                 justify-content: space-between;
@@ -3686,7 +3728,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 color: #1ed760;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Empty state РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Empty state \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-empty-state {
                 color: #3a3a3a;
                 padding: 10px 0 6px;
@@ -3819,7 +3861,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 font-size: 10px;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Settings gear button РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Settings gear button \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-settings-gear {
                 display: inline-flex;
                 align-items: center;
@@ -3861,7 +3903,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 height: 14px;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Settings back button РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Settings back button \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-settings-back {
                 display: inline-flex;
                 align-items: center;
@@ -3886,7 +3928,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 height: 12px;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Settings panel РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Settings panel \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-popup-main {
                 display: flex;
                 flex-direction: column;
@@ -3918,7 +3960,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 display: flex;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Settings rows РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Settings rows \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-settings-row {
                 display: flex;
                 flex-direction: column;
@@ -4108,7 +4150,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 color: #fecaca;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Retention value display РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Retention value display \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-retention-suffix {
                 font-size: 13px;
                 font-weight: 500;
@@ -4116,7 +4158,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 white-space: nowrap;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Badge pill РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Badge pill \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             .dtt-badge-pill {
                 display: inline-flex;
                 align-items: center;
@@ -4191,7 +4233,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 display: none;
             }
 
-            /* РІвЂќР‚РІвЂќР‚ Update modal РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚ */
+            /* \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Update modal \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A */
             #dtt-update-overlay {
                 position: fixed;
                 inset: 0;
@@ -4248,6 +4290,12 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 border: 1px solid rgba(30, 215, 96, 0.4);
                 background: rgba(30, 215, 96, 0.1);
                 margin-bottom: 16px;
+            }
+
+            .dtt-api-unavailable-badge {
+                color: #ff5a5f;
+                border-color: rgba(255, 90, 95, 0.45);
+                background: rgba(255, 90, 95, 0.12);
             }
 
             .dtt-update-title {
@@ -4688,9 +4736,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         toggleNode.classList.toggle("is-expanded", state.popup.todaySessionsExpanded);
         toggleNode.setAttribute(
             "aria-label",
-            state.popup.todaySessionsExpanded ? "Hide extra sessions" : "Show all sessions"
+            state.popup.todaySessionsExpanded ? t("hideExtraSessions") : t("showAllSessions")
         );
-        toggleNode.title = state.popup.todaySessionsExpanded ? "Hide extra sessions" : "Show all sessions";
+        toggleNode.title = state.popup.todaySessionsExpanded ? t("hideExtraSessions") : t("showAllSessions");
     }
 
     function updateHistoryToggle(dailySummaryRows) {
@@ -4709,9 +4757,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         toggleNode.classList.toggle("is-expanded", state.popup.historyExpanded);
         toggleNode.setAttribute(
             "aria-label",
-            state.popup.historyExpanded ? "Hide extra days" : "Show all days"
+            state.popup.historyExpanded ? t("hideExtraDays") : t("showAllDays")
         );
-        toggleNode.title = state.popup.historyExpanded ? "Hide extra days" : "Show all days";
+        toggleNode.title = state.popup.historyExpanded ? t("hideExtraDays") : t("showAllDays");
     }
 
     function clearPopupHideTimeout() {
@@ -4756,7 +4804,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     function buildPopupContent(root) {
         root.innerHTML = "";
 
-        // РІвЂќР‚РІвЂќР‚ Header (always visible) РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+        // \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Header (always visible) \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A
         const header = document.createElement("div");
         header.className = "dtt-popup-header";
 
@@ -4836,7 +4884,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         header.append(titleWrap, headerRight);
         root.appendChild(header);
 
-        // РІвЂќР‚РІвЂќР‚ Main content panel РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+        // \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Main content panel \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A
         const mainPanel = document.createElement("div");
         mainPanel.className = "dtt-popup-main";
 
@@ -4993,7 +5041,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         root.appendChild(mainPanel);
 
-        // РІвЂќР‚РІвЂќР‚ Settings panel РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+        // \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Settings panel \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A
         const settingsPanel = document.createElement("div");
         settingsPanel.className = "dtt-popup-settings";
 
@@ -5080,10 +5128,11 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const channelHint = document.createElement("div");
         channelHint.className = "dtt-popup-mode-hint";
         state.popup.settingsChannelButtons = [];
+        const channelUiText = getChannelUiText();
         const channelOptions = [
-            { value: "release", label: "Release" },
-            { value: "test", label: "Test" },
-            { value: "dev", label: "Dev" }
+            { value: "release", label: channelUiText.release },
+            { value: "test", label: channelUiText.test },
+            { value: "dev", label: channelUiText.dev }
         ];
         for (const option of channelOptions) {
             const button = document.createElement("button");
@@ -5391,7 +5440,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         retentionInput.step = "1";
         retentionInput.value = String(state.historyRetentionMonths);
         retentionInput.className = "dtt-retention-input";
-        retentionInput.title = `1РІР‚вЂњ${CONFIG.maxHistoryRetentionMonths}`;
+        retentionInput.title = `1\u0420\u0406\u0420\u201A\u0432\u0402\u045A${CONFIG.maxHistoryRetentionMonths}`;
         retentionInput.addEventListener("click", (event) => event.stopPropagation());
         retentionInput.addEventListener("change", (event) => {
             event.stopPropagation();
@@ -5604,7 +5653,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         root.appendChild(settingsPanel);
 
-        // РІвЂќР‚РІвЂќР‚ Save node refs РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+        // \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Save node refs \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A
         state.popup.titleNode = title;
         state.popup.badgeNode = badgePill;
         state.popup.viewToggleNode = weeklyToggleBtn;
@@ -6133,8 +6182,13 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.fullWipeBtnNode.textContent = t("fullWipe");
         }
         if (state.popup.settingsVersionNode) {
-            const channelText = CHANNEL === "test" ? "Test" : CHANNEL === "dev" ? "Dev" : "Release";
-            state.popup.settingsVersionNode.textContent = `Version: ${VERSION} (${channelText})`;
+            const channelText = CHANNEL === "test"
+                ? getChannelUiText().test
+                : CHANNEL === "dev"
+                    ? getChannelUiText().dev
+                    : getChannelUiText().release;
+            const versionLabel = state.language === "ru" ? "\u0412\u0435\u0440\u0441\u0438\u044F" : "Version";
+            state.popup.settingsVersionNode.textContent = `${versionLabel}: ${VERSION} (${channelText})`;
             state.popup.settingsVersionNode.title = t("updateCheckButton");
         }
         if (state.popup.settingsGearNode) {
@@ -6323,7 +6377,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                     }
                     if (state.popup.weeklyBestDayValueNode) {
                         state.popup.weeklyBestDayValueNode.textContent = weeklySummary.bestDay
-                            ? `${weeklySummary.bestDay.label} вЂў ${formatDuration(weeklySummary.bestDay.totalSeconds)}`
+                            ? `${weeklySummary.bestDay.label} \u0432\u0402\u045E ${formatDuration(weeklySummary.bestDay.totalSeconds)}`
                             : t("weeklyBestDayEmpty");
                     }
                     didMutateLayout = renderWeeklyBars(weeklySummary) || didMutateLayout;
@@ -7104,9 +7158,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 subtitle: "A one-time storage upgrade is running. Today sessions are being separated and old history sessions are being removed."
             }
             : {
-                badge: "Р С›Р СџР СћР ВР СљР ВР вЂ”Р С’Р В¦Р ВР Р‡",
-                title: "Р ВР Т‘Р ВµРЎвЂљ Р С•Р С—РЎвЂљР С‘Р СР С‘Р В·Р В°РЎвЂ Р С‘РЎРЏ Р В»Р С•Р С”Р В°Р В»РЎРЉР Р…РЎвЂ№РЎвЂ¦ Р Т‘Р В°Р Р…Р Р…РЎвЂ№РЎвЂ¦",
-                subtitle: "Р вЂ™РЎвЂ№Р С—Р С•Р В»Р Р…РЎРЏР ВµРЎвЂљРЎРѓРЎРЏ Р С•Р Т‘Р Р…Р С•РЎР‚Р В°Р В·Р С•Р Р†Р С•Р Вµ Р С•Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘Р Вµ РЎвЂ¦РЎР‚Р В°Р Р…Р С‘Р В»Р С‘РЎвЂ°Р В°. Р РЋР ВµРЎРѓРЎРѓР С‘Р С‘ Р В·Р В° РЎРѓР ВµР С–Р С•Р Т‘Р Р…РЎРЏ Р Р†РЎвЂ№Р Р…Р С•РЎРѓРЎРЏРЎвЂљРЎРѓРЎРЏ Р Р† Р С•РЎвЂљР Т‘Р ВµР В»РЎРЉР Р…РЎвЂ№Р в„– Р С”Р В»РЎР‹РЎвЂЎ, Р В° РЎРѓРЎвЂљР В°РЎР‚РЎвЂ№Р Вµ РЎРѓР ВµРЎРѓРЎРѓР С‘Р С‘ РЎС“Р Т‘Р В°Р В»РЎРЏРЎР‹РЎвЂљРЎРѓРЎРЏ Р С‘Р В· Р С‘РЎРѓРЎвЂљР С•РЎР‚Р С‘Р С‘."
+                badge: "\u041E\u041F\u0422\u0418\u041C\u0418\u0417\u0410\u0426\u0418\u042F",
+                title: "\u0418\u0434\u0435\u0442 \u043E\u043F\u0442\u0438\u043C\u0438\u0437\u0430\u0446\u0438\u044F \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0445 \u0434\u0430\u043D\u043D\u044B\u0445",
+                subtitle: "\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u043E\u0434\u043D\u043E\u0440\u0430\u0437\u043E\u0432\u043E\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u0445\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0430. \u0421\u0435\u0441\u0441\u0438\u0438 \u0437\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0432\u044B\u043D\u043E\u0441\u044F\u0442\u0441\u044F \u0432 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0439 \u043A\u043B\u044E\u0447, \u0430 \u0441\u0442\u0430\u0440\u044B\u0435 \u0441\u0435\u0441\u0441\u0438\u0438 \u0443\u0434\u0430\u043B\u044F\u044E\u0442\u0441\u044F \u0438\u0437 \u0438\u0441\u0442\u043E\u0440\u0438\u0438."
             };
     }
 

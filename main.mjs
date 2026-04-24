@@ -5,7 +5,7 @@ import(coreUrl.href)
     .then(({ startDailyTimeTracker }) => {
         return startDailyTimeTracker({
             channel: "release",
-            version: "2.1.0",
+            version: "2.1.1",
             versionCheckUrl: "https://vvertax.site/dtt/ext/version.json",
             storageOptimizationUrl: "https://vvertax.site/dtt/ext/dtt_optimization.mjs",
             badgeApiBaseUrl: "https://vvertax.site/dtt/api/badge.php",
