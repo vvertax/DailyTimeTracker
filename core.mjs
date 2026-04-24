@@ -2395,7 +2395,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         return getActiveStreakTiers()
             .filter((tier) => !tier.hidden)
             .map((tier) => `${tier.min}+`)
-            .join(" \u0432\u0402\u045E ");
+            .join(" \u2022 ");
     }
 
     function getStreakColor() {
