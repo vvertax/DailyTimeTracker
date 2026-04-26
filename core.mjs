@@ -4,12 +4,13 @@
 // ==============================================================
 
 export async function startDailyTimeTracker(runtimeOverrides = {}) {
+    // Runtime bootstrap / channel-neutral overrides.
     const normalizedRuntimeChannel = runtimeOverrides.channel === "test" || runtimeOverrides.channel === "dev"
         ? runtimeOverrides.channel
         : "release";
     const runtimeConfig = {
         channel: normalizedRuntimeChannel,
-        version: typeof runtimeOverrides.version === "string" ? runtimeOverrides.version : "2.0.1",
+        version: typeof runtimeOverrides.version === "string" ? runtimeOverrides.version : "2.2.0",
         versionCheckUrl: typeof runtimeOverrides.versionCheckUrl === "string"
             ? runtimeOverrides.versionCheckUrl
             : "https://vvertax.site/dtt/ext/version.json",
@@ -40,6 +41,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     const GLOBAL_RUNTIME_KEY = "__dtt_runtime_v1";
     window[GLOBAL_RUNTIME_KEY]?.cleanup?.();
 
+    // Shared runtime constants and persisted-key contract.
     const CONFIG = {
         storageKey: "dtt_today_v3",
         historyKey: "dtt_history_v2",
@@ -105,6 +107,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
     await runStorageOptimization();
 
+    // Shared runtime state. Channel wrappers only inject metadata into this neutral core.
     const state = {
         day: null,
         language: loadLanguage(),
@@ -287,6 +290,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     state.sessionTrackData = loadTodaySessionTrackData(state.day.date);
     state.runtime._lastStreakThresholdMet = getComputedDayTotalSeconds() >= loadStreakThreshold();
 
+    // Runtime UI localization is kept inside the hosted runtime on purpose.
     const I18N = {
         ru: {
             widgetTitle: "\u041D\u0430\u0436\u043C\u0438\u0442\u0435, \u0447\u0442\u043E\u0431\u044B \u0437\u0430\u043A\u0440\u0435\u043F\u0438\u0442\u044C \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043A\u0443",
@@ -536,7 +540,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         { min: 150, outer: "#3B82F6", inner: "#93C5FD", text: "#3B82F6", glow: "rgba(59,130,246,0.5)" },
         { min: 200, outer: "#40E0D0", inner: "#7FFFD4", text: "#40E0D0", glow: "rgba(64,224,208,0.5)" },
         { min: 250, outer: "#FFFFFF", inner: "#E0E0E0", text: "#FFFFFF", glow: "rgba(255,255,255,0.5)" },
-        { min: 2000, outer: "#B3F24E", inner: "#DCF8A0", text: "#B3F24E", glow: "rgba(179,242,78,0.55)", hidden: true }
+        { min: 777, outer: "#B3F24E", inner: "#DCF8A0", text: "#B3F24E", glow: "rgba(179,242,78,0.55)", hidden: true }
     ];
 
     const LONG_STREAK_TIERS = [
@@ -555,7 +559,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         { min: 300, outer: "#6EE7B7", inner: "#A7F3D0", text: "#6EE7B7", glow: "rgba(110,231,183,0.5)" },
         { min: 380, outer: "#C0C0C0", inner: "#E5E7EB", text: "#C0C0C0", glow: "rgba(192,192,192,0.5)" },
         { min: 500, outer: "#FFFFFF", inner: "#E0E0E0", text: "#FFFFFF", glow: "rgba(255,255,255,0.55)" },
-        { min: 2000, outer: "#B3F24E", inner: "#DCF8A0", text: "#B3F24E", glow: "rgba(179,242,78,0.55)", hidden: true }
+        { min: 1000, outer: "#B3F24E", inner: "#DCF8A0", text: "#B3F24E", glow: "rgba(179,242,78,0.55)", hidden: true }
     ];
 
     injectStyles();
@@ -573,12 +577,11 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     fetchDevChannelAccess();
     maybeShowTestChannelWarning();
     syncStoredVersionWithCurrentScript();
-    checkForUpdates();
     state.runtime.updateCheckIntervalId = setInterval(checkForUpdates, CONFIG.versionCheckIntervalMs);
     checkApiAvailability();
     state.runtime.apiHealthCheckIntervalId = setInterval(checkApiAvailability, CONFIG.apiHealthCheckIntervalMs);
 
-    // \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A TEMP: test streak colors \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A
+    // Debug helpers for manual streak color testing.
     window.dttSetStreak = function (n) {
         state.runtime._streakTestMode = true;
         state.streak.current = Number(n) || 0;
@@ -1638,6 +1641,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         document.getElementById("dtt-test-warning-overlay")?.remove();
     }
 
+    // Persisted settings and storage helpers.
     function loadLanguage() {
         const saved = Spicetify.LocalStorage.get(CONFIG.languageKey);
         return saved === "en" ? "en" : "ru";
@@ -2094,6 +2098,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         }
     }
 
+    // Update and API availability flow.
     async function checkForUpdates(options = {}) {
         const manual = Boolean(options.manual);
         const anchorEl = options.anchorEl instanceof Element ? options.anchorEl : null;
@@ -2313,6 +2318,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             return;
         }
 
+        // Once dismissed, the API modal stays closed until a real recovery resets outage state.
         if (state.runtime.apiUnavailableDismissed) {
             console.log("[DailyTimeTracker] API is still unavailable, but the modal was already dismissed for the current outage.");
             return;
@@ -2458,6 +2464,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         };
     }
 
+    // Day snapshot persistence and import/export helpers.
     function saveTodayData(now = Date.now()) {
         const snapshot = createPersistedDaySnapshot(now);
         state.lastPersistAt = now;
@@ -2480,7 +2487,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         saveSessionTrackData(now);
     }
 
-    // \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Export helpers \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A
+    // Export helpers.
     function getExportData() {
         const history = readHistory();
         const todayTotal = getComputedDayTotalSeconds();
@@ -5440,7 +5447,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         retentionInput.step = "1";
         retentionInput.value = String(state.historyRetentionMonths);
         retentionInput.className = "dtt-retention-input";
-        retentionInput.title = `1\u0420\u0406\u0420\u201A\u0432\u0402\u045A${CONFIG.maxHistoryRetentionMonths}`;
+        retentionInput.title = `1-${CONFIG.maxHistoryRetentionMonths}`;
         retentionInput.addEventListener("click", (event) => event.stopPropagation());
         retentionInput.addEventListener("change", (event) => {
             event.stopPropagation();
@@ -5653,7 +5660,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
         root.appendChild(settingsPanel);
 
-        // \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A Save node refs \u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A\u0420\u0406\u0432\u0402\u045C\u0420\u201A
+        // Save node references for incremental popup updates.
         state.popup.titleNode = title;
         state.popup.badgeNode = badgePill;
         state.popup.viewToggleNode = weeklyToggleBtn;
@@ -5909,6 +5916,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         });
     }
 
+    // Popup rendering and incremental UI updates.
     function renderWeeklyBars(weeklySummary) {
         if (!state.popup.weeklyBarsNode) {
             return false;
@@ -6749,6 +6757,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.runtime.injectObserver = observer;
     }
 
+    // Active playback and top-track qualification logic.
     function checkTrackChange() {
         try {
             const trackInfo = getCurrentTrackInfo();
@@ -6916,6 +6925,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         document.addEventListener("visibilitychange", state.ui.visibilityHandler);
     }
 
+    // Cleanup, teardown, and one-time storage optimization.
     function cleanup() {
         clearPopupHideTimeout();
         if (state.runtime.intervalId !== null) {
