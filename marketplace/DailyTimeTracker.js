@@ -1,22 +1,53 @@
 (function bootDailyTimeTracker() {
+    const LOG_PREFIX = "[DailyTimeTracker]";
+
+    // Bootstrap / dependencies
     if (!Spicetify?.Player || !Spicetify?.LocalStorage) {
         return setTimeout(bootDailyTimeTracker, 500);
     }
 
-    const channelKey = "dtt_channel_v1";
+    const CHANNEL_KEY = "dtt_channel_v1";
     const cacheBust = Date.now();
     const devChannelCheckTimeoutMs = 12000;
     const devChannelCheckRetryCount = 3;
     const devChannelCheckRetryDelayMs = 1500;
-    const releaseUrl = `https://vvertax.site/dtt/ext/main.mjs?v=${cacheBust}`;
-    const channels = {
-        release: releaseUrl,
-        test: `https://vvertax.site/dtt/ext/test/main.mjs?v=${cacheBust}`,
-        dev: `https://vvertax.site/dtt/ext/dev/main.mjs?v=${cacheBust}`
-    };
-    const savedChannel = Spicetify.LocalStorage.get(channelKey);
-    const selectedChannel = savedChannel === "test" || savedChannel === "dev" ? savedChannel : "release";
+    const apiBaseUrl = "https://vvertax.site/dtt/api";
+    const runtimeBaseUrl = "https://vvertax.site/dtt/ext";
+    const runtimeSearch = `?v=${cacheBust}`;
 
+    const channelConfigs = {
+        release: {
+            name: "release",
+            runtimeUrl: `${runtimeBaseUrl}/main.mjs${runtimeSearch}`
+        },
+        test: {
+            name: "test",
+            runtimeUrl: `${runtimeBaseUrl}/test/main.mjs${runtimeSearch}`
+        },
+        dev: {
+            name: "dev",
+            runtimeUrl: `${runtimeBaseUrl}/dev/main.mjs${runtimeSearch}`
+        }
+    };
+
+    const isKnownChannel = (value) => value === "test" || value === "dev" || value === "release";
+    const getSavedChannel = () => {
+        const savedChannel = Spicetify.LocalStorage.get(CHANNEL_KEY);
+        return isKnownChannel(savedChannel) ? savedChannel : "release";
+    };
+    const saveChannel = (channel) => {
+        try {
+            Spicetify.LocalStorage.set(CHANNEL_KEY, isKnownChannel(channel) ? channel : "release");
+        } catch (_) {}
+    };
+
+    const selectedChannel = getSavedChannel();
+    const selectedChannelConfig = channelConfigs[selectedChannel];
+    const releaseChannelConfig = channelConfigs.release;
+
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // Channel selection
     const resolvePlatformUsername = () => {
         const candidates = [
             Spicetify.Platform?.username,
@@ -40,31 +71,36 @@
         return "";
     };
 
-    const importRelease = () => import(releaseUrl).catch((error) => {
-        console.error("[DailyTimeTracker] Failed to import release runtime.", error);
-    });
-    const retryBoot = () => setTimeout(bootDailyTimeTracker, 1000);
-    const resetToRelease = () => {
+    const importRuntime = async (channelConfig) => {
         try {
-            Spicetify.LocalStorage.set(channelKey, "release");
-        } catch (_) {}
+            await import(channelConfig.runtimeUrl);
+            return true;
+        } catch (error) {
+            console.error(`${LOG_PREFIX} ${channelConfig.name} runtime import failed.`, error);
+            return false;
+        }
     };
-    const importChannel = () => {
-        import(channels[selectedChannel]).catch((error) => {
-            console.error(`[DailyTimeTracker] Failed to import ${selectedChannel} runtime. Falling back to release.`, error);
-            if (selectedChannel === "release") {
-                return;
-            }
 
-            resetToRelease();
-            importRelease();
-        });
+    // Runtime import and fallback
+    const importReleaseRuntime = async () => importRuntime(releaseChannelConfig);
+    const importSelectedRuntimeWithFallback = async () => {
+        const imported = await importRuntime(selectedChannelConfig);
+        if (imported || selectedChannel === "release") {
+            return;
+        }
+
+        // Test/dev runtime import failure is considered unsafe for the saved channel.
+        saveChannel("release");
+        console.error(`${LOG_PREFIX} ${selectedChannel} runtime import failed. Falling back to release and resetting the saved channel.`);
+        await importReleaseRuntime();
     };
 
     if (selectedChannel !== "dev") {
-        return importChannel();
+        void importSelectedRuntimeWithFallback();
+        return;
     }
 
+    // Dev channel gate
     if (!Spicetify?.Platform) {
         return setTimeout(bootDailyTimeTracker, 500);
     }
@@ -74,37 +110,39 @@
         return setTimeout(bootDailyTimeTracker, 500);
     }
 
-    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    const checkDevChannelAccess = async () => {
+    const fetchDevChannelAccess = async (attempt) => {
+        const controller = typeof AbortController === "function" ? new AbortController() : null;
+        const timeoutId = controller
+            ? setTimeout(() => controller.abort(), devChannelCheckTimeoutMs)
+            : null;
+
+        try {
+            const response = await fetch(
+                `${apiBaseUrl}/dev_channel.php?uid=${encodeURIComponent(uid)}&t=${cacheBust}&attempt=${attempt}`,
+                { signal: controller?.signal }
+            );
+            return response.ok ? await response.json() : null;
+        } finally {
+            if (timeoutId !== null) {
+                clearTimeout(timeoutId);
+            }
+        }
+    };
+
+    const resolveDevChannelAccess = async () => {
         for (let attempt = 1; attempt <= devChannelCheckRetryCount; attempt += 1) {
-            const controller = typeof AbortController === "function" ? new AbortController() : null;
-            const timeoutId = controller
-                ? setTimeout(() => controller.abort(), devChannelCheckTimeoutMs)
-                : null;
-
             try {
-                const response = await fetch(
-                    `https://vvertax.site/dtt/api/dev_channel.php?uid=${encodeURIComponent(uid)}&t=${cacheBust}&attempt=${attempt}`,
-                    { signal: controller?.signal }
-                );
-                const payload = response.ok ? await response.json() : null;
-                if (timeoutId !== null) {
-                    clearTimeout(timeoutId);
-                }
-
+                const payload = await fetchDevChannelAccess(attempt);
                 if (payload?.allowed === true) {
-                    return true;
+                    return { status: "allowed" };
                 }
 
                 if (payload?.allowed === false) {
-                    return false;
+                    return { status: "denied" };
                 }
             } catch (error) {
-                if (timeoutId !== null) {
-                    clearTimeout(timeoutId);
-                }
                 console.error(
-                    `[DailyTimeTracker] Dev channel access check attempt ${attempt}/${devChannelCheckRetryCount} failed.`,
+                    `${LOG_PREFIX} dev channel access check attempt ${attempt}/${devChannelCheckRetryCount} failed.`,
                     error
                 );
             }
@@ -114,25 +152,29 @@
             }
         }
 
-        return null;
+        return { status: "temporary_failure" };
     };
 
-    checkDevChannelAccess()
-        .then((allowed) => {
-            if (allowed === true) {
-                return importChannel();
+    void resolveDevChannelAccess()
+        .then(async ({ status }) => {
+            if (status === "allowed") {
+                await importSelectedRuntimeWithFallback();
+                return;
             }
 
-            if (allowed === false) {
-                resetToRelease();
-                return importRelease();
+            if (status === "denied") {
+                // Saved channel is reset only when the API explicitly denies dev access.
+                saveChannel("release");
+                console.error(`${LOG_PREFIX} dev channel access denied. Falling back to release and resetting the saved channel.`);
+                await importReleaseRuntime();
+                return;
             }
 
-            console.error("[DailyTimeTracker] Dev channel access check timed out after multiple attempts. Using release for this launch without resetting the saved channel.");
-            return importRelease();
+            console.error(`${LOG_PREFIX} dev channel access timed out or failed temporarily. Using release for this launch without resetting the saved channel.`);
+            await importReleaseRuntime();
         })
-        .catch((error) => {
-            console.error("[DailyTimeTracker] Unexpected dev channel access check failure. Using release for this launch without resetting the saved channel.", error);
-            importRelease();
+        .catch(async (error) => {
+            console.error(`${LOG_PREFIX} unexpected dev channel gate failure. Using release for this launch without resetting the saved channel.`, error);
+            await importReleaseRuntime();
         });
 })();
