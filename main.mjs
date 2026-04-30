@@ -8,7 +8,7 @@ import(coreUrl.href)
         // Hand off release-specific metadata and endpoints to the shared runtime.
         return startDailyTimeTracker({
             channel: "release",
-            version: "2.2.0",
+            version: "2.3.0",
             versionCheckUrl: "https://vvertax.site/dtt/ext/version.json",
             storageOptimizationUrl: "https://vvertax.site/dtt/ext/dtt_optimization.mjs",
             badgeApiBaseUrl: "https://vvertax.site/dtt/api/badge.php",
