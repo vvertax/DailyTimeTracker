@@ -62,6 +62,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         topTracksDisplayCountKey: "dtt_top_tracks_display_count_v1",
         channelKey: runtimeConfig.channelKey,
         testNoticeSeenKey: runtimeConfig.testNoticeSeenKey,
+        finalReleaseNoticeSeenKey: "dtt_final_release_notice_seen_v1",
         versionKey: "dtt_version_v1",
         storageOptimizationUrl: runtimeConfig.storageOptimizationUrl,
         versionCheckUrl: runtimeConfig.versionCheckUrl,
@@ -2046,6 +2047,14 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         Spicetify.LocalStorage.set(CONFIG.versionKey, v);
     }
 
+    function loadFinalReleaseNoticeSeenVersion() {
+        return Spicetify.LocalStorage.get(CONFIG.finalReleaseNoticeSeenKey) || "";
+    }
+
+    function saveFinalReleaseNoticeSeenVersion(v) {
+        Spicetify.LocalStorage.set(CONFIG.finalReleaseNoticeSeenKey, v);
+    }
+
     function syncStoredVersionWithCurrentScript() {
         if (loadStoredVersion() !== VERSION) {
             saveStoredVersion(VERSION);
@@ -2057,10 +2066,11 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             return;
         }
 
-        if (loadStoredVersion() === VERSION || document.getElementById("dtt-update-overlay")) {
+        if (loadFinalReleaseNoticeSeenVersion() === VERSION || document.getElementById("dtt-update-overlay")) {
             return;
         }
 
+        saveFinalReleaseNoticeSeenVersion(VERSION);
         showFinalReleaseNoticeModal();
     }
 
@@ -2925,6 +2935,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         clearStoredValue(CONFIG.streakControlKey);
         clearStoredValue(CONFIG.channelKey);
         clearStoredValue(CONFIG.testNoticeSeenKey);
+        clearStoredValue(CONFIG.finalReleaseNoticeSeenKey);
 
         state.language = "ru";
         state.dailyGoalSeconds = 0;
@@ -6413,7 +6424,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                     }
                     if (state.popup.weeklyBestDayValueNode) {
                         state.popup.weeklyBestDayValueNode.textContent = weeklySummary.bestDay
-                            ? `${weeklySummary.bestDay.label} \u0432\u0402\u045E ${formatDuration(weeklySummary.bestDay.totalSeconds)}`
+                            ? `${weeklySummary.bestDay.label} \u2022 ${formatDuration(weeklySummary.bestDay.totalSeconds)}`
                             : t("weeklyBestDayEmpty");
                     }
                     didMutateLayout = renderWeeklyBars(weeklySummary) || didMutateLayout;
