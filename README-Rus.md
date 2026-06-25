@@ -1,4 +1,4 @@
-# Daily Time Tracker для Spicetify · [English](./README-Rus.md)
+# Daily Time Tracker для Spicetify · [English](./README.md)
 
 Скрипт считает, сколько времени вы слушаете Spotify каждый день, и показывает таймер в верхней панели.
 
