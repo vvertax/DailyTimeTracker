@@ -1,11 +1,9 @@
-Want to read in Russian? Click [here](./README-Rus.md).
-
-# Daily Time Tracker for Spicetify
+# Daily Time Tracker for Spicetify · [Russian](./README-Rus.md)
 
 Tracks how much time you spend listening to Spotify each day and shows a timer in the top bar.
 
 > [!NOTE]
-> This codebase was written with the help of ChatGPT.
+> This codebase was written with the help of Сlaude Code.
 
 ![Preview](./preview.png)
 
