@@ -71,88 +71,231 @@
         return "";
     };
 
-    const showLoadError = () => {
-        if (document.getElementById("dtt-load-error-toast")) return;
-
-        const style = document.createElement("style");
-        style.textContent = `
-            #dtt-load-error-toast {
-                position: fixed;
-                bottom: 24px;
-                left: 50%;
-                transform: translateX(-50%);
-                z-index: 99999;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                padding: 10px 16px;
-                border-radius: 8px;
-                background: rgba(30, 10, 10, 0.96);
-                border: 1px solid rgba(239, 68, 68, 0.45);
-                box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
-                color: #f87171;
-                font-size: 13px;
-                font-family: var(--font-family, CircularSp, sans-serif);
-                max-width: 360px;
-                pointer-events: auto;
-                animation: dtt-toast-in 0.2s ease;
+    // Self-contained update-style modal. The hosted runtime (and its CSS) failed
+    // to load here, so every style is inlined to mirror the in-app update modal.
+    const diagnoseLoadFailure = async (url, importError) => {
+        const controller = typeof AbortController === "function" ? new AbortController() : null;
+        const timeoutId = controller ? setTimeout(() => controller.abort(), 10000) : null;
+        try {
+            const response = await fetch(url, { method: "GET", cache: "no-store", signal: controller?.signal });
+            if (timeoutId !== null) clearTimeout(timeoutId);
+            if (!response.ok) {
+                return `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
             }
-            @keyframes dtt-toast-in {
-                from { opacity: 0; transform: translateX(-50%) translateY(8px); }
-                to   { opacity: 1; transform: translateX(-50%) translateY(0); }
-            }
-            #dtt-load-error-toast-close {
-                flex-shrink: 0;
-                background: none;
-                border: none;
-                color: inherit;
-                opacity: 0.6;
-                cursor: pointer;
-                font-size: 15px;
-                line-height: 1;
-                padding: 0 2px;
-            }
-            #dtt-load-error-toast-close:hover { opacity: 1; }
-        `;
-        document.head.appendChild(style);
-
-        const toast = document.createElement("div");
-        toast.id = "dtt-load-error-toast";
-
-        const text = document.createElement("span");
-        text.textContent = "Daily Time Tracker не удалось загрузить. Проверьте интернет-соединение.";
-
-        const closeBtn = document.createElement("button");
-        closeBtn.id = "dtt-load-error-toast-close";
-        closeBtn.innerHTML = "&#x2715;";
-        closeBtn.addEventListener("click", () => toast.remove());
-
-        toast.append(text, closeBtn);
-        document.body.appendChild(toast);
+            // Server is reachable, so the failure came from the import/parse step itself.
+            return (importError && importError.message) || `HTTP ${response.status}`;
+        } catch (fetchError) {
+            if (timeoutId !== null) clearTimeout(timeoutId);
+            if (fetchError && fetchError.name === "AbortError") return "ERR_TIMED_OUT";
+            return (fetchError && fetchError.message) || (importError && importError.message) || "Network error";
+        }
     };
 
+    const showLoadError = async (url, importError) => {
+        if (document.getElementById("dtt-load-error-overlay")) return;
+
+        const reason = await diagnoseLoadFailure(url, importError);
+        if (document.getElementById("dtt-load-error-overlay")) return;
+
+        const overlay = document.createElement("div");
+        overlay.id = "dtt-load-error-overlay";
+        overlay.style.cssText = `
+            position: fixed;
+            inset: 0;
+            z-index: 100000;
+            background: rgba(0, 0, 0, 0.65);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        `;
+
+        const modal = document.createElement("div");
+        modal.style.cssText = `
+            position: relative;
+            background: #1a1a1a;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 32px 36px;
+            max-width: 400px;
+            width: calc(100vw - 48px);
+            text-align: center;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+            font-family: "Spotify Mix", "SpotifyMixUI", sans-serif;
+            color: #fff;
+        `;
+
+        const close = () => overlay.remove();
+
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.innerHTML = "&#x2715;";
+        closeBtn.title = "Close";
+        closeBtn.style.cssText = `
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 18px;
+            cursor: pointer;
+            padding: 4px 8px;
+            line-height: 1;
+            border-radius: 4px;
+        `;
+        closeBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            close();
+        });
+
+        const badge = document.createElement("span");
+        badge.textContent = "ERROR";
+        badge.style.cssText = `
+            display: inline-block;
+            padding: 4px 14px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #ff5a5f;
+            border: 1px solid rgba(255, 90, 95, 0.45);
+            background: rgba(255, 90, 95, 0.12);
+            margin-bottom: 16px;
+        `;
+
+        const title = document.createElement("div");
+        title.textContent = "Daily Time Tracker failed to load";
+        title.style.cssText = `
+            font-size: 17px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        `;
+
+        const subtitle = document.createElement("div");
+        subtitle.textContent = "The hosted runtime could not be loaded. Check your internet connection and reload Spotify — the script will try again on the next launch.";
+        subtitle.style.cssText = `
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.55);
+            margin-bottom: 20px;
+            line-height: 1.5;
+        `;
+
+        const reasonBlock = document.createElement("div");
+        reasonBlock.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 90, 95, 0.08);
+            border: 1px solid rgba(255, 90, 95, 0.25);
+            border-radius: 10px;
+            padding: 14px 20px;
+            margin-bottom: 22px;
+        `;
+
+        const reasonLabel = document.createElement("span");
+        reasonLabel.textContent = "REASON";
+        reasonLabel.style.cssText = `
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.4);
+        `;
+
+        const reasonValue = document.createElement("span");
+        reasonValue.textContent = reason;
+        reasonValue.style.cssText = `
+            font-size: 16px;
+            font-weight: 700;
+            color: #ff5a5f;
+            letter-spacing: 0.03em;
+            font-family: "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
+            word-break: break-word;
+        `;
+
+        reasonBlock.append(reasonLabel, reasonValue);
+
+        const buttons = document.createElement("div");
+        buttons.style.cssText = "display: flex; gap: 10px;";
+
+        const reloadBtn = document.createElement("button");
+        reloadBtn.type = "button";
+        reloadBtn.textContent = "Reload";
+        reloadBtn.style.cssText = `
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            border: none;
+            background: #fff;
+            color: #000;
+            font-family: inherit;
+        `;
+        reloadBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            window.location.reload();
+        });
+
+        const dismissBtn = document.createElement("button");
+        dismissBtn.type = "button";
+        dismissBtn.textContent = "Close";
+        dismissBtn.style.cssText = `
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            border: none;
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            font-family: inherit;
+        `;
+        dismissBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            close();
+        });
+
+        buttons.append(reloadBtn, dismissBtn);
+        modal.append(closeBtn, badge, title, subtitle, reasonBlock, buttons);
+        overlay.appendChild(modal);
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) close();
+        });
+
+        document.body.appendChild(overlay);
+    };
+
+    // Returns null on success, or the thrown error on failure.
     const importRuntime = async (channelConfig) => {
         try {
             await import(channelConfig.runtimeUrl);
-            return true;
+            return null;
         } catch (error) {
             console.error(`${LOG_PREFIX} ${channelConfig.name} runtime import failed.`, error);
-            return false;
+            return error || new Error("Unknown import error");
         }
     };
 
     // Runtime import and fallback
     const importReleaseRuntime = async () => {
-        const imported = await importRuntime(releaseChannelConfig);
-        if (!imported) showLoadError();
-        return imported;
+        const error = await importRuntime(releaseChannelConfig);
+        if (error) showLoadError(releaseChannelConfig.runtimeUrl, error);
+        return !error;
     };
     const importSelectedRuntimeWithFallback = async () => {
-        const imported = await importRuntime(selectedChannelConfig);
-        if (imported) return;
+        const error = await importRuntime(selectedChannelConfig);
+        if (!error) return;
 
         if (selectedChannel === "release") {
-            showLoadError();
+            showLoadError(selectedChannelConfig.runtimeUrl, error);
             return;
         }
 
