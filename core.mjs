@@ -10,7 +10,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         : "release";
     const runtimeConfig = {
         channel: normalizedRuntimeChannel,
-        version: typeof runtimeOverrides.version === "string" ? runtimeOverrides.version : "2.4.0",
+        version: typeof runtimeOverrides.version === "string" ? runtimeOverrides.version : "2.4.1",
         versionCheckUrl: typeof runtimeOverrides.versionCheckUrl === "string"
             ? runtimeOverrides.versionCheckUrl
             : "https://vvertax.site/dtt/ext/version.json",
@@ -3740,6 +3740,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                 transition: background 0.15s ease, color 0.15s ease;
                 flex-shrink: 0;
             }
+            .dtt-today-sessions-toggle[hidden] {
+                display: none !important;
+            }
 
             .dtt-today-sessions-toggle:hover {
                 background: rgba(255, 255, 255, 0.1);
@@ -4838,7 +4841,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const rows = state.day.intervals.map((interval) => ({
             key: `${interval.start}-${interval.end}`,
             label: `${formatClockTime(interval.start)} - ${formatClockTime(interval.end)}`,
-            duration: formatDuration(getIntervalDurationSeconds(interval))
+            duration: formatDuration(getIntervalDurationSeconds(interval)),
+            isActive: false
         }));
         const liveInterval = getVisibleSessionInterval(now);
 
@@ -4846,7 +4850,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             rows.push({
                 key: `${liveInterval.start}-${liveInterval.end}`,
                 label: `${formatClockTime(liveInterval.start)} - ${formatClockTime(liveInterval.end)}`,
-                duration: formatDuration(getIntervalDurationSeconds(liveInterval))
+                duration: formatDuration(getIntervalDurationSeconds(liveInterval)),
+                isActive: true
             });
         }
 
@@ -6530,7 +6535,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         if (state.popup.intervalsListNode) {
             const displayedIntervalRows = getDisplayedTodayIntervalRows(todayIntervalRows).map((row) => ({
                 ...row,
-                isToday: true
+                isToday: Boolean(row.isActive)
             }));
             const intervalsSignature = `${isWeekMode ? "1" : "0"}|${state.popup.todaySessionsExpanded ? "1" : "0"}|${createRowsSignature(displayedIntervalRows)}`;
             if (intervalsSignature !== state.popup.lastIntervalsSignature) {
