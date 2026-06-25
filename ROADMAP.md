@@ -1,6 +1,4 @@
-Want to read in Russian? Click [here](./ROADMAP-Rus.md).
-
-# Daily Time Tracker - Roadmap
+# Daily Time Tracker - Roadmap · [Russian](./ROADMAP-Rus.md)
 
 > A living document for shipped milestones, active plans, and intentionally dropped ideas.
 
