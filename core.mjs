@@ -10,7 +10,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         : "release";
     const runtimeConfig = {
         channel: normalizedRuntimeChannel,
-        version: typeof runtimeOverrides.version === "string" ? runtimeOverrides.version : "2.3.0",
+        version: typeof runtimeOverrides.version === "string" ? runtimeOverrides.version : "2.4.0",
         versionCheckUrl: typeof runtimeOverrides.versionCheckUrl === "string"
             ? runtimeOverrides.versionCheckUrl
             : "https://vvertax.site/dtt/ext/version.json",
@@ -60,9 +60,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         sessionTrackCountsKey: "dtt_session_track_counts_v1",
         topTracksVisibleKey: "dtt_top_tracks_visible_v1",
         topTracksDisplayCountKey: "dtt_top_tracks_display_count_v1",
+        trackHistoryKey: "dtt_track_history_v1",
         channelKey: runtimeConfig.channelKey,
         testNoticeSeenKey: runtimeConfig.testNoticeSeenKey,
-        finalReleaseNoticeSeenKey: "dtt_final_release_notice_seen_v1",
         versionKey: "dtt_version_v1",
         storageOptimizationUrl: runtimeConfig.storageOptimizationUrl,
         versionCheckUrl: runtimeConfig.versionCheckUrl,
@@ -170,6 +170,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             weeklyBestDayValueNode: null,
             weeklyBarsNode: null,
             weeklyCompareNode: null,
+            weeklyTopTracksNode: null,
+            weeklyTopTracksListNode: null,
             weeklyCompareTodayLabelNode: null,
             weeklyCompareTodayValueNode: null,
             weeklyCompareYesterdayLabelNode: null,
@@ -180,6 +182,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             lastIntervalsSignature: "",
             lastTopTracksSignature: "",
             lastWeeklySignature: "",
+            lastWeeklyTopTracksSignature: "",
             lastSummarySignature: "",
             lastLanguage: null,
             weeklyBarNodes: [],
@@ -407,10 +410,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             updateVersionLabel: "\u0412\u0415\u0420\u0421\u0418\u042F",
             updateBtnRestart: "\u041F\u0435\u0440\u0435\u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C",
             updateBtnReleaseNotes: "\u0427\u0442\u043E \u043D\u043E\u0432\u043E\u0433\u043E",
-            finalReleaseBadge: "\u0417\u0410\u041C\u0415\u0422\u041A\u0410",
-            finalReleaseTitle: "\u0421\u043F\u0430\u0441\u0438\u0431\u043E, \u0447\u0442\u043E \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442\u0435 Daily Time Tracker",
-            finalReleaseSubtitle: "\u0412\u0435\u0440\u0441\u0438\u044F 2.3.0 \u043C\u043E\u0436\u0435\u0442 \u0441\u0442\u0430\u0442\u044C \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u043C \u043F\u043E\u043B\u043D\u043E\u0446\u0435\u043D\u043D\u044B\u043C \u0440\u0435\u043B\u0438\u0437\u043E\u043C \u043F\u0440\u043E\u0435\u043A\u0442\u0430. \u0421\u043A\u043E\u0440\u0435\u0435 \u0432\u0441\u0435\u0433\u043E \u0434\u0430\u043B\u044C\u0448\u0435 \u0431\u0443\u0434\u0443\u0442 \u0432\u044B\u0445\u043E\u0434\u0438\u0442\u044C \u0442\u043E\u043B\u044C\u043A\u043E \u043D\u0435\u0431\u043E\u043B\u044C\u0448\u0438\u0435 DOM-\u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F, \u0447\u0442\u043E\u0431\u044B \u0441\u043A\u0440\u0438\u043F\u0442 \u0438 \u0434\u0430\u043B\u044C\u0448\u0435 \u043E\u0442\u043E\u0431\u0440\u0430\u0436\u0430\u043B\u0441\u044F \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u043E.",
-            finalReleaseBtnPrimary: "\u0421\u043F\u0430\u0441\u0438\u0431\u043E",
+            weeklyTopTracksTitle: "\u0422\u0440\u0435\u043A\u0438 \u0437\u0430 \u043D\u0435\u0434\u0435\u043B\u044E",
+            weeklyTopTracksSwitchTitle: "\u041F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u043D\u0435\u0434\u0435\u043B\u044C\u043D\u044B\u0439 \u0440\u0430\u0437\u0434\u0435\u043B",
+            weeklyTopTracksEmpty: "\u041D\u0435\u0442 \u043F\u0440\u043E\u0441\u043B\u0443\u0448\u0438\u0432\u0430\u043D\u0438\u0439 \u0437\u0430 \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 7 \u0434\u043D\u0435\u0439.",
             apiUnavailableBadge: "API",
             apiUnavailableTitle: "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u0442\u044C\u0441\u044F \u043A API Daily Time Tracker",
             apiUnavailableSubtitle: "\u0421\u043A\u0440\u0438\u043F\u0442 \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442 \u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \u043A\u0430\u043A \u0440\u0430\u043D\u044C\u0448\u0435. \u041F\u043E\u0432\u0442\u043E\u0440\u043D\u0430\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0431\u0443\u0434\u0435\u0442 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438."
@@ -529,10 +531,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             updateVersionLabel: "VERSION",
             updateBtnRestart: "Restart",
             updateBtnReleaseNotes: "Release Notes",
-            finalReleaseBadge: "NOTE",
-            finalReleaseTitle: "Thank you for using Daily Time Tracker",
-            finalReleaseSubtitle: "Version 2.3.0 may be the last full release of the project. From this point on, it will most likely only receive small DOM compatibility updates to keep the script displaying correctly.",
-            finalReleaseBtnPrimary: "Thank you",
+            weeklyTopTracksTitle: "Weekly Top Tracks",
+            weeklyTopTracksSwitchTitle: "Switch weekly section",
+            weeklyTopTracksEmpty: "No track plays in the last 7 days.",
             apiUnavailableBadge: "API",
             apiUnavailableTitle: "Unable to connect to the Daily Time Tracker API",
             apiUnavailableSubtitle: "The script will continue working as before. It will retry automatically."
@@ -571,7 +572,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         { min: 1000, outer: "#B3F24E", inner: "#DCF8A0", text: "#B3F24E", glow: "rgba(179,242,78,0.55)", hidden: true }
     ];
 
-    const FINAL_RELEASE_NOTICE_VERSIONS = new Set(["2.3.0", "102.3.0", "202.3.0"]);
+    const WEEKLY_TOP_TRACKS_COUNT = 5;
 
     injectStyles();
     createWidget();
@@ -586,7 +587,6 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
     computeStreak();
     fetchBadge();
     fetchDevChannelAccess();
-    maybeShowFinalReleaseNotice();
     maybeShowTestChannelWarning();
     syncStoredVersionWithCurrentScript();
     state.runtime.updateCheckIntervalId = setInterval(checkForUpdates, CONFIG.versionCheckIntervalMs);
@@ -1198,6 +1198,97 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         return normalized;
     }
 
+    function loadTrackHistoryData() {
+        return safeParse(Spicetify.LocalStorage.get(CONFIG.trackHistoryKey), {});
+    }
+
+    function saveTrackHistoryData(data) {
+        Spicetify.LocalStorage.set(CONFIG.trackHistoryKey, JSON.stringify(data));
+    }
+
+    function archiveTodayTrackHistory(date, sessionTrackData) {
+        const merged = new Map();
+        for (const session of sessionTrackData.sessions) {
+            for (const track of session.tracks || []) {
+                const key = track.uri || `${track.artist}|${track.name}`;
+                if (!key) continue;
+                const existing = merged.get(key);
+                if (existing) {
+                    existing.plays += Math.max(1, track.plays);
+                    if (!existing.name && track.name) existing.name = track.name;
+                    if (!existing.artist && track.artist) existing.artist = track.artist;
+                } else {
+                    merged.set(key, { uri: track.uri, name: track.name, artist: track.artist, plays: Math.max(1, track.plays) });
+                }
+            }
+        }
+        if (merged.size === 0) return;
+
+        const history = loadTrackHistoryData();
+        history[date] = Object.fromEntries(merged);
+
+        const cutoff = shiftDateString(getTodayString(), -6);
+        for (const k of Object.keys(history)) {
+            if (k < cutoff) delete history[k];
+        }
+
+        saveTrackHistoryData(history);
+    }
+
+    function getWeeklyTopTracksData() {
+        const merged = new Map();
+
+        const allSessions = state.sessionTrackData.sessions.slice();
+        if (state.currentSession?.tracks?.length) {
+            allSessions.push({ tracks: state.currentSession.tracks.map(cloneSessionTrackPlay) });
+        }
+        for (const session of allSessions) {
+            for (const track of session.tracks || []) {
+                const key = track.uri || `${track.artist}|${track.name}`;
+                if (!key) continue;
+                const existing = merged.get(key);
+                if (existing) {
+                    existing.plays += Math.max(1, track.plays);
+                    if (!existing.name && track.name) existing.name = track.name;
+                    if (!existing.artist && track.artist) existing.artist = track.artist;
+                } else {
+                    merged.set(key, { uri: track.uri, name: track.name, artist: track.artist, plays: Math.max(1, track.plays) });
+                }
+            }
+        }
+
+        const history = loadTrackHistoryData();
+        for (let offset = 1; offset <= 6; offset++) {
+            const date = shiftDateString(state.day.date, -offset);
+            const dayData = history[date];
+            if (!dayData) continue;
+            for (const [key, track] of Object.entries(dayData)) {
+                const existing = merged.get(key);
+                if (existing) {
+                    existing.plays += Math.max(1, track.plays);
+                    if (!existing.name && track.name) existing.name = track.name;
+                    if (!existing.artist && track.artist) existing.artist = track.artist;
+                } else {
+                    merged.set(key, { uri: track.uri, name: track.name, artist: track.artist, plays: Math.max(1, track.plays) });
+                }
+            }
+        }
+
+        return Array.from(merged.values())
+            .sort((a, b) => b.plays - a.plays || (a.name || "").localeCompare(b.name || ""))
+            .slice(0, WEEKLY_TOP_TRACKS_COUNT)
+            .map((track, index) => ({
+                key: track.uri || `${track.artist}-${track.name}-${index}`,
+                rank: index + 1,
+                name: track.name || "Track",
+                artist: track.artist || "",
+                plays: track.plays,
+                label: track.name || "Track",
+                details: track.artist || undefined,
+                duration: `${track.plays} ${t("topTracksPlayCount")}`
+            }));
+    }
+
     function normalizeHistoryEntry(entry) {
         if (typeof entry === "number") {
             return {
@@ -1732,6 +1823,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.lastTopTracksSignature = "";
         state.popup.lastIntervalsSignature = "";
         state.popup.lastWeeklySignature = "";
+        state.popup.lastWeeklyTopTracksSignature = "";
         state.popup.lastHistorySignature = "";
         state.ui.lastWidgetSignature = "";
         if (state.popup.node) {
@@ -2047,31 +2139,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         Spicetify.LocalStorage.set(CONFIG.versionKey, v);
     }
 
-    function loadFinalReleaseNoticeSeenVersion() {
-        return Spicetify.LocalStorage.get(CONFIG.finalReleaseNoticeSeenKey) || "";
-    }
-
-    function saveFinalReleaseNoticeSeenVersion(v) {
-        Spicetify.LocalStorage.set(CONFIG.finalReleaseNoticeSeenKey, v);
-    }
-
     function syncStoredVersionWithCurrentScript() {
         if (loadStoredVersion() !== VERSION) {
             saveStoredVersion(VERSION);
         }
-    }
-
-    function maybeShowFinalReleaseNotice() {
-        if (!FINAL_RELEASE_NOTICE_VERSIONS.has(VERSION)) {
-            return;
-        }
-
-        if (loadFinalReleaseNoticeSeenVersion() === VERSION || document.getElementById("dtt-update-overlay")) {
-            return;
-        }
-
-        saveFinalReleaseNoticeSeenVersion(VERSION);
-        showFinalReleaseNoticeModal();
     }
 
     function compareVersions(a, b) {
@@ -2153,91 +2224,6 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         if (document.getElementById("dtt-update-overlay")) return;
         showUpdateModal(data.version);
         return true;
-    }
-
-    function showFinalReleaseNoticeModal() {
-        hideUpdateModal();
-        const changelogUrl = `https://github.com/vvertax/DailyTimeTracker/releases/tag/v${VERSION}`;
-
-        const overlay = document.createElement("div");
-        overlay.id = "dtt-update-overlay";
-
-        const modal = document.createElement("div");
-        modal.className = "dtt-update-modal";
-
-        const closeModal = () => {
-            hideUpdateModal();
-        };
-
-        const closeBtn = document.createElement("button");
-        closeBtn.className = "dtt-update-close";
-        closeBtn.innerHTML = "&#x2715;";
-        closeBtn.title = t("closeButton");
-        closeBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            closeModal();
-        });
-
-        const badge = document.createElement("span");
-        badge.className = "dtt-update-badge";
-        badge.textContent = t("finalReleaseBadge");
-
-        const title = document.createElement("div");
-        title.className = "dtt-update-title";
-        title.textContent = t("finalReleaseTitle");
-
-        const subtitle = document.createElement("div");
-        subtitle.className = "dtt-update-subtitle";
-        subtitle.textContent = t("finalReleaseSubtitle");
-
-        const versionBlock = document.createElement("div");
-        versionBlock.className = "dtt-update-version-block";
-
-        const versionLabel = document.createElement("span");
-        versionLabel.className = "dtt-update-version-label";
-        versionLabel.textContent = t("updateVersionLabel");
-
-        const versionValue = document.createElement("span");
-        versionValue.className = "dtt-update-version-value";
-        versionValue.textContent = VERSION;
-
-        versionBlock.appendChild(versionLabel);
-        versionBlock.appendChild(versionValue);
-
-        const buttons = document.createElement("div");
-        buttons.className = "dtt-update-buttons";
-
-        const thanksBtn = document.createElement("button");
-        thanksBtn.className = "dtt-update-btn dtt-update-btn-primary";
-        thanksBtn.textContent = t("finalReleaseBtnPrimary");
-        thanksBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            closeModal();
-        });
-        buttons.appendChild(thanksBtn);
-
-        const changelogBtn = document.createElement("button");
-        changelogBtn.className = "dtt-update-btn dtt-update-btn-secondary";
-        changelogBtn.textContent = t("updateBtnReleaseNotes");
-        changelogBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            window.open(changelogUrl, "_blank");
-        });
-        buttons.appendChild(changelogBtn);
-
-        modal.appendChild(closeBtn);
-        modal.appendChild(badge);
-        modal.appendChild(title);
-        modal.appendChild(subtitle);
-        modal.appendChild(versionBlock);
-        modal.appendChild(buttons);
-
-        overlay.appendChild(modal);
-        overlay.addEventListener("click", (e) => {
-            if (e.target === overlay) closeModal();
-        });
-
-        document.body.appendChild(overlay);
     }
 
     function showUpdateModal(latestVersion) {
@@ -2929,13 +2915,13 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         clearStoredValue(CONFIG.longStreakProgressionKey);
         clearStoredValue(CONFIG.badgeVisibilityKey);
         clearStoredValue(CONFIG.sessionTrackCountsKey);
+        clearStoredValue(CONFIG.trackHistoryKey);
         clearStoredValue(CONFIG.topTracksVisibleKey);
         clearStoredValue(CONFIG.topTracksDisplayCountKey);
         clearStoredValue(CONFIG.streakKey);
         clearStoredValue(CONFIG.streakControlKey);
         clearStoredValue(CONFIG.channelKey);
         clearStoredValue(CONFIG.testNoticeSeenKey);
-        clearStoredValue(CONFIG.finalReleaseNoticeSeenKey);
 
         state.language = "ru";
         state.dailyGoalSeconds = 0;
@@ -2989,6 +2975,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         };
 
         if (normalized.date !== today) {
+            const staleTrackRaw = safeParse(Spicetify.LocalStorage.get(CONFIG.sessionTrackCountsKey), null);
+            if (staleTrackRaw?.date === normalized.date) {
+                archiveTodayTrackHistory(normalized.date, normalizeSessionTrackData(staleTrackRaw, normalized.date));
+            }
             archiveDay(normalized);
             const freshDay = createEmptyDay(today);
             Spicetify.LocalStorage.set(
@@ -3107,6 +3097,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             }
         }
 
+        archiveTodayTrackHistory(state.day.date, state.sessionTrackData);
         archiveDay(state.day);
         state.day = createEmptyDay(today);
         state.sessionTrackData = createEmptySessionTrackData(today);
@@ -3919,6 +3910,107 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             #dtt-hover-popup.dtt-popup-mode-compact .dtt-weekly-stat-value {
                 font-size: 13px;
             }
+
+            .dtt-weekly-top-tracks {
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                margin-top: 4px;
+            }
+            .dtt-weekly-top-tracks[hidden] { display: none !important; }
+
+            .dtt-wtt-card {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 12px;
+                border-radius: 10px;
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                transition: background 0.15s ease;
+            }
+            .dtt-wtt-card:hover {
+                background: rgba(255, 255, 255, 0.07);
+            }
+
+            .dtt-wtt-rank {
+                flex-shrink: 0;
+                width: 22px;
+                height: 22px;
+                border-radius: 50%;
+                background: rgba(30, 215, 96, 0.1);
+                border: 1px solid rgba(30, 215, 96, 0.25);
+                color: rgba(30, 215, 96, 0.85);
+                font-size: 10px;
+                font-weight: 700;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-variant-numeric: tabular-nums;
+            }
+            .dtt-wtt-rank--gold {
+                background: rgba(250, 197, 21, 0.15);
+                border-color: rgba(250, 197, 21, 0.45);
+                color: #fac515;
+            }
+            .dtt-wtt-rank--silver {
+                background: rgba(192, 192, 192, 0.12);
+                border-color: rgba(192, 192, 192, 0.4);
+                color: #c0c0c0;
+            }
+            .dtt-wtt-rank--bronze {
+                background: rgba(205, 127, 50, 0.13);
+                border-color: rgba(205, 127, 50, 0.4);
+                color: #cd7f32;
+            }
+
+            .dtt-wtt-info {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .dtt-wtt-name {
+                font-size: 13px;
+                font-weight: 600;
+                color: #e8e8e8;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .dtt-wtt-artist {
+                font-size: 11px;
+                color: #585858;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .dtt-wtt-plays {
+                flex-shrink: 0;
+                font-size: 11px;
+                font-weight: 700;
+                color: #1ed760;
+                font-variant-numeric: tabular-nums;
+                white-space: nowrap;
+            }
+
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-wtt-card {
+                padding: 8px 10px;
+                gap: 8px;
+            }
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-wtt-rank {
+                width: 19px;
+                height: 19px;
+                font-size: 9px;
+            }
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-wtt-name { font-size: 12px; }
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-wtt-artist { font-size: 10px; }
+            #dtt-hover-popup.dtt-popup-mode-compact .dtt-wtt-plays { font-size: 10px; }
 
             .dtt-weekly-bars {
                 display: grid;
@@ -5040,8 +5132,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         weeklyDetailSwitch.addEventListener("click", (event) => {
             event.preventDefault();
             event.stopPropagation();
-            state.popup.weeklyDetailMode = state.popup.weeklyDetailMode === "summary" ? "compare" : "summary";
+            const cur = state.popup.weeklyDetailMode;
+            state.popup.weeklyDetailMode = cur === "summary" ? "compare" : cur === "compare" ? "tracks" : "summary";
             state.popup.lastWeeklySignature = "";
+            state.popup.lastWeeklyTopTracksSignature = "";
             updatePopupStaticTextV2();
             updatePopupDynamicContentV2();
             schedulePopupPosition(true);
@@ -5091,7 +5185,13 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         weeklyCompareDeltaValue.className = "dtt-weekly-stat-value";
         weeklyCompareDeltaCard.append(weeklyCompareDeltaLabel, weeklyCompareDeltaValue);
         weeklyCompare.append(weeklyCompareTodayCard, weeklyCompareYesterdayCard, weeklyCompareDeltaCard);
-        weeklySection.append(weeklyHeading, weeklyStats, weeklyCompare, weeklyBars);
+        const weeklyTopTracks = document.createElement("div");
+        weeklyTopTracks.className = "dtt-weekly-top-tracks";
+        weeklyTopTracks.hidden = true;
+        const weeklyTopTracksList = document.createElement("div");
+        weeklyTopTracksList.className = "dtt-top-tracks-list";
+        weeklyTopTracks.appendChild(weeklyTopTracksList);
+        weeklySection.append(weeklyHeading, weeklyStats, weeklyCompare, weeklyBars, weeklyTopTracks);
         mainPanel.appendChild(weeklySection);
 
         root.appendChild(mainPanel);
@@ -5737,6 +5837,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.weeklyBestDayValueNode = weeklyBestDayValue;
         state.popup.weeklyBarsNode = weeklyBars;
         state.popup.weeklyCompareNode = weeklyCompare;
+        state.popup.weeklyTopTracksNode = weeklyTopTracks;
+        state.popup.weeklyTopTracksListNode = weeklyTopTracksList;
         state.popup.weeklyCompareTodayLabelNode = weeklyCompareTodayLabel;
         state.popup.weeklyCompareTodayValueNode = weeklyCompareTodayValue;
         state.popup.weeklyCompareYesterdayLabelNode = weeklyCompareYesterdayLabel;
@@ -5903,6 +6005,60 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         }
     }
 
+    function renderWeeklyTopTracks(listNode, rows) {
+        listNode.innerHTML = "";
+
+        if (rows.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "dtt-empty-state";
+            empty.textContent = t("weeklyTopTracksEmpty");
+            listNode.appendChild(empty);
+            return;
+        }
+
+        for (const row of rows) {
+            if (row.key === "empty-weekly-top-tracks") {
+                const empty = document.createElement("div");
+                empty.className = "dtt-empty-state";
+                empty.textContent = row.label;
+                listNode.appendChild(empty);
+                return;
+            }
+
+            const card = document.createElement("div");
+            card.className = "dtt-wtt-card";
+            if (row.key) card.dataset.key = row.key;
+
+            const rank = document.createElement("span");
+            const medalClass = row.rank === 1 ? " dtt-wtt-rank--gold" : row.rank === 2 ? " dtt-wtt-rank--silver" : row.rank === 3 ? " dtt-wtt-rank--bronze" : "";
+            rank.className = "dtt-wtt-rank" + medalClass;
+            rank.textContent = row.rank;
+
+            const info = document.createElement("div");
+            info.className = "dtt-wtt-info";
+
+            const name = document.createElement("span");
+            name.className = "dtt-wtt-name";
+            name.textContent = row.name;
+
+            info.appendChild(name);
+
+            if (row.artist) {
+                const artist = document.createElement("span");
+                artist.className = "dtt-wtt-artist";
+                artist.textContent = row.artist;
+                info.appendChild(artist);
+            }
+
+            const plays = document.createElement("span");
+            plays.className = "dtt-wtt-plays";
+            plays.textContent = row.duration;
+
+            card.append(rank, info, plays);
+            listNode.appendChild(card);
+        }
+    }
+
     function createHistorySignature(rows) {
         return rows
             .map(([date, entry]) => `${date}:${entry.totalSeconds}`)
@@ -6059,16 +6215,19 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.historyTitleNode.textContent = t("historyTitle");
         }
         if (state.popup.weeklySectionTitleNode) {
-            state.popup.weeklySectionTitleNode.textContent = state.popup.weeklyDetailMode === "compare"
-                ? t("yesterdayVsTodayTitle")
-                : t("weeklySummaryTitle");
+            state.popup.weeklySectionTitleNode.textContent =
+                state.popup.weeklyDetailMode === "compare" ? t("yesterdayVsTodayTitle") :
+                state.popup.weeklyDetailMode === "tracks"  ? t("weeklyTopTracksTitle") :
+                t("weeklySummaryTitle");
         }
         if (state.popup.weeklyDetailSwitchNode) {
-            const nextLabel = state.popup.weeklyDetailMode === "compare"
-                ? t("weeklySummaryTitle")
-                : t("yesterdayVsTodayTitle");
-            state.popup.weeklyDetailSwitchNode.title = `${t("yesterdayVsTodaySwitchTitle")}: ${nextLabel}`;
-            state.popup.weeklyDetailSwitchNode.setAttribute("aria-label", `${t("yesterdayVsTodaySwitchTitle")}: ${nextLabel}`);
+            const cur2 = state.popup.weeklyDetailMode;
+            const nextLabel =
+                cur2 === "summary" ? t("yesterdayVsTodayTitle") :
+                cur2 === "compare" ? t("weeklyTopTracksTitle") :
+                t("weeklySummaryTitle");
+            state.popup.weeklyDetailSwitchNode.title = `${t("weeklyTopTracksSwitchTitle")}: ${nextLabel}`;
+            state.popup.weeklyDetailSwitchNode.setAttribute("aria-label", `${t("weeklyTopTracksSwitchTitle")}: ${nextLabel}`);
         }
         if (state.popup.weeklyAverageLabelNode) {
             state.popup.weeklyAverageLabelNode.textContent = t("weeklyAverageLabel");
@@ -6292,7 +6451,9 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         const isWeekMode = state.popup.viewMode === "week";
         const weeklySummary = isWeekMode ? getWeeklySummaryData(totalSeconds) : null;
         const weeklyComparison = isWeekMode ? getYesterdayVsTodayData(totalSeconds) : null;
-        const isWeeklyCompareMode = isWeekMode && state.popup.weeklyDetailMode === "compare";
+        const weeklyDetailMode = state.popup.weeklyDetailMode;
+        const isWeeklyCompareMode = isWeekMode && weeklyDetailMode === "compare";
+        const isWeeklyTracksMode  = isWeekMode && weeklyDetailMode === "tracks";
         const goal = getDailyGoalProgress(totalSeconds);
         let didMutateLayout = false;
 
@@ -6390,8 +6551,13 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             state.popup.weeklyCompareNode.hidden = !isWeeklyCompareMode;
             didMutateLayout = true;
         }
-        if (state.popup.weeklyBarsNode && state.popup.weeklyBarsNode.hidden !== isWeeklyCompareMode) {
-            state.popup.weeklyBarsNode.hidden = isWeeklyCompareMode;
+        const weeklyBarsHidden = isWeeklyCompareMode || isWeeklyTracksMode;
+        if (state.popup.weeklyBarsNode && state.popup.weeklyBarsNode.hidden !== weeklyBarsHidden) {
+            state.popup.weeklyBarsNode.hidden = weeklyBarsHidden;
+            didMutateLayout = true;
+        }
+        if (state.popup.weeklyTopTracksNode && state.popup.weeklyTopTracksNode.hidden !== !isWeeklyTracksMode) {
+            state.popup.weeklyTopTracksNode.hidden = !isWeeklyTracksMode;
             didMutateLayout = true;
         }
 
@@ -6430,6 +6596,21 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
                     didMutateLayout = renderWeeklyBars(weeklySummary) || didMutateLayout;
                 }
                 state.popup.lastWeeklySignature = weeklySignature;
+            }
+        }
+
+        if (state.popup.weeklyTopTracksNode && state.popup.weeklyTopTracksListNode) {
+            const weeklyTopRows = getWeeklyTopTracksData();
+            const renderedWeeklyTopRows = weeklyTopRows.length > 0
+                ? weeklyTopRows
+                : [{ key: "empty-weekly-top-tracks", label: t("weeklyTopTracksEmpty"), duration: "" }];
+            const weeklyTopSig = `${isWeeklyTracksMode ? "1" : "0"}|${state.language}|${createRowsSignature(renderedWeeklyTopRows)}`;
+            if (weeklyTopSig !== state.popup.lastWeeklyTopTracksSignature) {
+                if (!state.popup.weeklyTopTracksNode.hidden) {
+                    renderWeeklyTopTracks(state.popup.weeklyTopTracksListNode, renderedWeeklyTopRows);
+                }
+                state.popup.lastWeeklyTopTracksSignature = weeklyTopSig;
+                didMutateLayout = true;
             }
         }
 
@@ -6560,6 +6741,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.weeklyBestDayValueNode = null;
         state.popup.weeklyBarsNode = null;
         state.popup.weeklyCompareNode = null;
+        state.popup.weeklyTopTracksNode = null;
+        state.popup.weeklyTopTracksListNode = null;
         state.popup.weeklyCompareTodayLabelNode = null;
         state.popup.weeklyCompareTodayValueNode = null;
         state.popup.weeklyCompareYesterdayLabelNode = null;
@@ -6570,6 +6753,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.lastIntervalsSignature = "";
         state.popup.lastTopTracksSignature = "";
         state.popup.lastWeeklySignature = "";
+        state.popup.lastWeeklyTopTracksSignature = "";
         state.popup.lastSummarySignature = "";
         state.popup.lastHeight = 0;
         state.popup.lastLanguage = null;
@@ -7038,6 +7222,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.weeklyBestDayValueNode = null;
         state.popup.weeklyBarsNode = null;
         state.popup.weeklyCompareNode = null;
+        state.popup.weeklyTopTracksNode = null;
+        state.popup.weeklyTopTracksListNode = null;
         state.popup.weeklyCompareTodayLabelNode = null;
         state.popup.weeklyCompareTodayValueNode = null;
         state.popup.weeklyCompareYesterdayLabelNode = null;
@@ -7048,6 +7234,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.lastIntervalsSignature = "";
         state.popup.lastTopTracksSignature = "";
         state.popup.lastWeeklySignature = "";
+        state.popup.lastWeeklyTopTracksSignature = "";
         state.popup.lastSummarySignature = "";
         state.popup.lastHeight = 0;
         state.popup.lastLanguage = null;
