@@ -71,6 +71,66 @@
         return "";
     };
 
+    const showLoadError = () => {
+        if (document.getElementById("dtt-load-error-toast")) return;
+
+        const style = document.createElement("style");
+        style.textContent = `
+            #dtt-load-error-toast {
+                position: fixed;
+                bottom: 24px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 99999;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 16px;
+                border-radius: 8px;
+                background: rgba(30, 10, 10, 0.96);
+                border: 1px solid rgba(239, 68, 68, 0.45);
+                box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+                color: #f87171;
+                font-size: 13px;
+                font-family: var(--font-family, CircularSp, sans-serif);
+                max-width: 360px;
+                pointer-events: auto;
+                animation: dtt-toast-in 0.2s ease;
+            }
+            @keyframes dtt-toast-in {
+                from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+                to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+            }
+            #dtt-load-error-toast-close {
+                flex-shrink: 0;
+                background: none;
+                border: none;
+                color: inherit;
+                opacity: 0.6;
+                cursor: pointer;
+                font-size: 15px;
+                line-height: 1;
+                padding: 0 2px;
+            }
+            #dtt-load-error-toast-close:hover { opacity: 1; }
+        `;
+        document.head.appendChild(style);
+
+        const toast = document.createElement("div");
+        toast.id = "dtt-load-error-toast";
+
+        const text = document.createElement("span");
+        text.textContent = "Daily Time Tracker не удалось загрузить. Проверьте интернет-соединение.";
+
+        const closeBtn = document.createElement("button");
+        closeBtn.id = "dtt-load-error-toast-close";
+        closeBtn.innerHTML = "&#x2715;";
+        closeBtn.addEventListener("click", () => toast.remove());
+
+        toast.append(text, closeBtn);
+        document.body.appendChild(toast);
+    };
+
     const importRuntime = async (channelConfig) => {
         try {
             await import(channelConfig.runtimeUrl);
@@ -82,10 +142,17 @@
     };
 
     // Runtime import and fallback
-    const importReleaseRuntime = async () => importRuntime(releaseChannelConfig);
+    const importReleaseRuntime = async () => {
+        const imported = await importRuntime(releaseChannelConfig);
+        if (!imported) showLoadError();
+        return imported;
+    };
     const importSelectedRuntimeWithFallback = async () => {
         const imported = await importRuntime(selectedChannelConfig);
-        if (imported || selectedChannel === "release") {
+        if (imported) return;
+
+        if (selectedChannel === "release") {
+            showLoadError();
             return;
         }
 
