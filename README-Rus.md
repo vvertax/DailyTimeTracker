@@ -1,11 +1,9 @@
-Хотите прочитать на английском? Нажмите [сюда](./README.md).
-
-# Daily Time Tracker для Spicetify
+# Daily Time Tracker для Spicetify · [English](./README-Rus.md)
 
 Скрипт считает, сколько времени вы слушаете Spotify каждый день, и показывает таймер в верхней панели.
 
 > [!NOTE]
-> Этот код писался с помощью ChatGPT.
+> Этот код писался с помощью Сlaude Code.
 
 ![Превью](./preview.png)
 
