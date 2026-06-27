@@ -5449,7 +5449,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         topTracksWrapHint.textContent = t("topTracksWrapHint");
         const topTracksWrapInput = document.createElement("button");
         topTracksWrapInput.type = "button";
-        topTracksWrapInput.className = "dtt-toggle-btn";
+        topTracksWrapInput.className = "dtt-language-button dtt-settings-toggle-button";
         setSettingsToggleButtonState(topTracksWrapInput, state.topTracksWrap);
         topTracksWrapInput.addEventListener("click", () => {
             state.topTracksWrap = !state.topTracksWrap;
