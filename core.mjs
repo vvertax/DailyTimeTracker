@@ -10,7 +10,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         : "release";
     const runtimeConfig = {
         channel: normalizedRuntimeChannel,
-        version: typeof runtimeOverrides.version === "string" ? runtimeOverrides.version : "2.4.1",
+        version: typeof runtimeOverrides.version === "string" ? runtimeOverrides.version : "2.5.0",
         versionCheckUrl: typeof runtimeOverrides.versionCheckUrl === "string"
             ? runtimeOverrides.versionCheckUrl
             : "https://vvertax.site/dtt/ext/version.json",
@@ -60,6 +60,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         sessionTrackCountsKey: "dtt_session_track_counts_v1",
         topTracksVisibleKey: "dtt_top_tracks_visible_v1",
         topTracksDisplayCountKey: "dtt_top_tracks_display_count_v1",
+        topTracksWrapKey: "dtt_top_tracks_wrap_v1",
         trackHistoryKey: "dtt_track_history_v1",
         channelKey: runtimeConfig.channelKey,
         testNoticeSeenKey: runtimeConfig.testNoticeSeenKey,
@@ -124,6 +125,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         badgeVisible: loadBadgeVisibility(),
         topTracksVisible: loadTopTracksVisible(),
         topTracksDisplayCount: loadTopTracksDisplayCount(),
+        topTracksWrap: loadTopTracksWrap(),
         badge: null,
         devChannelAvailable: false,
         sessionTrackData: null,
@@ -235,6 +237,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             settingsTopTracksCountRowNode: null,
             settingsTopTracksCountTitleNode: null,
             settingsTopTracksCountButtons: [],
+            settingsTopTracksWrapRowNode: null,
+            settingsTopTracksWrapTitleNode: null,
+            settingsTopTracksWrapHintNode: null,
+            settingsTopTracksWrapInputNode: null,
             exportTitleNode: null,
             exportCsvBtnNode: null,
             exportJsonBtnNode: null,
@@ -309,6 +315,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             topTracksToggleHint: "\u041F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0442\u044C \u0431\u043B\u043E\u043A \u0441 \u0441\u0430\u043C\u044B\u043C\u0438 \u0447\u0430\u0441\u0442\u043E \u043F\u0440\u043E\u0438\u0433\u0440\u0430\u043D\u043D\u044B\u043C\u0438 \u0442\u0440\u0435\u043A\u0430\u043C\u0438 \u0437\u0430 \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u0434\u0435\u043D\u044C.",
             topTracksCountLabel: "\u0422\u0440\u0435\u043A\u043E\u0432 \u0432 \u0431\u043B\u043E\u043A\u0435",
             topTracksCountHint: "\u0421\u043A\u043E\u043B\u044C\u043A\u043E \u0442\u0440\u0435\u043A\u043E\u0432 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0442\u044C \u0432 \u0431\u043B\u043E\u043A\u0435 \u0441\u0432\u043E\u0434\u043A\u0438.",
+            topTracksWrapLabel: "\u041F\u0435\u0440\u0435\u043D\u043E\u0441 \u0442\u0435\u043A\u0441\u0442\u0430",
+            topTracksWrapHint: "\u041F\u0435\u0440\u0435\u043D\u043E\u0441\u0438\u0442\u044C \u0434\u043B\u0438\u043D\u043D\u044B\u0435 \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u044F \u043D\u0430 \u043D\u043E\u0432\u0443\u044E \u0441\u0442\u0440\u043E\u043A\u0443.",
             topTracksPlayCount: "\u043F\u0440\u043E\u0441\u043B.",
             historyTitle: "\u0418\u0441\u0442\u043E\u0440\u0438\u044F",
             dailyGoalLabel: "\u0414\u043D\u0435\u0432\u043D\u0430\u044F \u0446\u0435\u043B\u044C",
@@ -430,6 +438,8 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             topTracksToggleHint: "Show the block with the most played tracks for the current day.",
             topTracksCountLabel: "Show tracks",
             topTracksCountHint: "How many top tracks to show in the summary.",
+            topTracksWrapLabel: "Text wrap",
+            topTracksWrapHint: "Wrap long track titles onto a new line.",
             topTracksPlayCount: "plays",
             historyTitle: "History",
             dailyGoalLabel: "Daily goal",
@@ -1402,6 +1412,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         return normalizeTopTracksDisplayCount(Spicetify.LocalStorage.get(CONFIG.topTracksDisplayCountKey));
     }
 
+    function loadTopTracksWrap() {
+        return Spicetify.LocalStorage.get(CONFIG.topTracksWrapKey) === "1";
+    }
+
     function normalizeKeepPeriod(period) {
         if (!period || typeof period.start !== "string" || !period.start) {
             return null;
@@ -1502,6 +1516,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
 
     function saveTopTracksDisplayCount() {
         Spicetify.LocalStorage.set(CONFIG.topTracksDisplayCountKey, String(state.topTracksDisplayCount));
+    }
+
+    function saveTopTracksWrap() {
+        Spicetify.LocalStorage.set(CONFIG.topTracksWrapKey, state.topTracksWrap ? "1" : "0");
     }
 
     function saveStreakControlData() {
@@ -2918,6 +2936,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         clearStoredValue(CONFIG.trackHistoryKey);
         clearStoredValue(CONFIG.topTracksVisibleKey);
         clearStoredValue(CONFIG.topTracksDisplayCountKey);
+        clearStoredValue(CONFIG.topTracksWrapKey);
         clearStoredValue(CONFIG.streakKey);
         clearStoredValue(CONFIG.streakControlKey);
         clearStoredValue(CONFIG.channelKey);
@@ -3628,11 +3647,31 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
             }
 
             .dtt-top-tracks-list .dtt-interval-item {
-                padding: 6px 0;
+                padding: 6px 0; gap: 8px; align-items: flex-start;
+            }
+
+            .dtt-top-tracks-list .dtt-interval-main {
+                flex: 1; min-width: 0;
             }
 
             .dtt-top-tracks-list .dtt-interval-range {
-                font-size: 11px;
+                display: block; font-size: 11px; white-space: normal;
+            }
+
+            .dtt-top-tracks-summary.dtt-tracks-wrap .dtt-top-tracks-list .dtt-interval-item {
+                flex-direction: column; align-items: center; gap: 4px;
+            }
+
+            .dtt-top-tracks-summary.dtt-tracks-wrap .dtt-top-tracks-list .dtt-interval-main {
+                flex: none; width: 100%;
+            }
+
+            .dtt-top-tracks-summary.dtt-tracks-wrap .dtt-top-tracks-list .dtt-interval-range {
+                display: block; width: 100%; white-space: normal; text-align: center;
+            }
+
+            .dtt-top-tracks-summary.dtt-tracks-wrap .dtt-top-tracks-list .dtt-interval-duration {
+                text-align: center;
             }
 
             #dtt-hover-popup.dtt-popup-mode-compact .dtt-top-tracks-list .dtt-interval-range {
@@ -5398,6 +5437,32 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         topTracksCountRow.append(topTracksCountTitle, topTracksCountContent);
         settingsPanel.appendChild(topTracksCountRow);
 
+        const topTracksWrapRow = document.createElement("div");
+        topTracksWrapRow.className = "dtt-settings-row";
+        topTracksWrapRow.hidden = !state.topTracksVisible;
+        const topTracksWrapTitle = document.createElement("div");
+        topTracksWrapTitle.className = "dtt-settings-row-label";
+        const topTracksWrapContent = document.createElement("div");
+        topTracksWrapContent.className = "dtt-settings-row-content";
+        const topTracksWrapHint = document.createElement("div");
+        topTracksWrapHint.className = "dtt-settings-row-hint";
+        topTracksWrapHint.textContent = t("topTracksWrapHint");
+        const topTracksWrapInput = document.createElement("button");
+        topTracksWrapInput.type = "button";
+        topTracksWrapInput.className = "dtt-toggle-btn";
+        setSettingsToggleButtonState(topTracksWrapInput, state.topTracksWrap);
+        topTracksWrapInput.addEventListener("click", () => {
+            state.topTracksWrap = !state.topTracksWrap;
+            saveTopTracksWrap();
+            setSettingsToggleButtonState(topTracksWrapInput, state.topTracksWrap);
+            if (state.popup.summaryTopTracksWrapNode) {
+                state.popup.summaryTopTracksWrapNode.classList.toggle("dtt-tracks-wrap", state.topTracksWrap);
+            }
+        });
+        topTracksWrapContent.append(topTracksWrapHint, topTracksWrapInput);
+        topTracksWrapRow.append(topTracksWrapTitle, topTracksWrapContent);
+        settingsPanel.appendChild(topTracksWrapRow);
+
         const popupModeRow = document.createElement("div");
         popupModeRow.className = "dtt-settings-row";
         const popupModeTitle = document.createElement("div");
@@ -5824,6 +5889,7 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.summaryGoalValueNode = goalValue;
         state.popup.summaryGoalProgressNode = goalProgressBar;
         state.popup.summaryTopTracksWrapNode = topTracksWrap;
+        state.popup.summaryTopTracksWrapNode.classList.toggle("dtt-tracks-wrap", state.topTracksWrap);
         state.popup.summaryTopTracksListNode = topTracksList;
         state.popup.intervalsSectionNode = intervalsSection;
         state.popup.sessionsTitleNode = intervalsTitle;
@@ -5870,6 +5936,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.settingsTopTracksInputNode = topTracksInput;
         state.popup.settingsTopTracksCountRowNode = topTracksCountRow;
         state.popup.settingsTopTracksCountTitleNode = topTracksCountTitle;
+        state.popup.settingsTopTracksWrapRowNode = topTracksWrapRow;
+        state.popup.settingsTopTracksWrapTitleNode = topTracksWrapTitle;
+        state.popup.settingsTopTracksWrapHintNode = topTracksWrapHint;
+        state.popup.settingsTopTracksWrapInputNode = topTracksWrapInput;
         state.popup.settingsPopupModeTitleNode = popupModeTitle;
         state.popup.settingsPopupModeHintNode = popupModeHint;
         state.popup.settingsPerformanceModeTitleNode = performanceModeTitle;
@@ -6290,6 +6360,18 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         }
         if (state.popup.settingsTopTracksCountTitleNode) {
             state.popup.settingsTopTracksCountTitleNode.textContent = t("topTracksCountLabel");
+        }
+        if (state.popup.settingsTopTracksWrapRowNode) {
+            state.popup.settingsTopTracksWrapRowNode.hidden = !state.topTracksVisible;
+        }
+        if (state.popup.settingsTopTracksWrapTitleNode) {
+            state.popup.settingsTopTracksWrapTitleNode.textContent = t("topTracksWrapLabel");
+        }
+        if (state.popup.settingsTopTracksWrapHintNode) {
+            state.popup.settingsTopTracksWrapHintNode.textContent = t("topTracksWrapHint");
+        }
+        if (state.popup.settingsTopTracksWrapInputNode) {
+            setSettingsToggleButtonState(state.popup.settingsTopTracksWrapInputNode, state.topTracksWrap);
         }
         if (state.popup.settingsChannelTitleNode) {
             state.popup.settingsChannelTitleNode.textContent = getChannelUiText().title;
@@ -6812,6 +6894,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.settingsTopTracksCountRowNode = null;
         state.popup.settingsTopTracksCountTitleNode = null;
         state.popup.settingsTopTracksCountButtons = [];
+        state.popup.settingsTopTracksWrapRowNode = null;
+        state.popup.settingsTopTracksWrapTitleNode = null;
+        state.popup.settingsTopTracksWrapHintNode = null;
+        state.popup.settingsTopTracksWrapInputNode = null;
         state.popup.updateCheckTitleNode = null;
         state.popup.updateCheckHintNode = null;
         state.popup.updateCheckBtnNode = null;
@@ -7293,6 +7379,10 @@ export async function startDailyTimeTracker(runtimeOverrides = {}) {
         state.popup.settingsTopTracksCountRowNode = null;
         state.popup.settingsTopTracksCountTitleNode = null;
         state.popup.settingsTopTracksCountButtons = [];
+        state.popup.settingsTopTracksWrapRowNode = null;
+        state.popup.settingsTopTracksWrapTitleNode = null;
+        state.popup.settingsTopTracksWrapHintNode = null;
+        state.popup.settingsTopTracksWrapInputNode = null;
         state.popup.updateCheckTitleNode = null;
         state.popup.updateCheckHintNode = null;
         state.popup.updateCheckBtnNode = null;
