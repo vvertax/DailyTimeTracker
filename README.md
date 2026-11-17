@@ -2,6 +2,9 @@
 
 Tracks how much time you spend listening to Spotify each day and shows a timer in the top bar.
 
+> [!IMPORTANT]
+> Support for this script has been discontinued.
+
 > [!NOTE]
 > This codebase was written with the help of Сlaude Code.
 
